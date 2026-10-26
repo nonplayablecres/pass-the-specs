@@ -64,6 +64,22 @@ function Health({ d, report }) {
   );
 }
 
+// The whole drive as a grid of squares, start (top left) to end (bottom right):
+// grey = not read yet, green = reads fine, amber = slow (weak), red = unreadable
+function SectorMap({ map }) {
+  return (
+    <div className="sector-wrap">
+      <div className="sector-map" role="img" aria-label={`Sector map: ${(map.match(/b/g) || []).length} bad areas, ${(map.match(/s/g) || []).length} slow areas`}>
+        {map.split('').map((c, i) => <i key={i} className={'sc ' + c} />)}
+      </div>
+      <div className="sector-key">
+        <span><i className="sc g" /> Good</span><span><i className="sc s" /> Slow</span><span><i className="sc b" /> Bad</span><span><i className="sc ." /> Not read</span>
+        <span className="muted">Start of drive top left → end bottom right</span>
+      </div>
+    </div>
+  );
+}
+
 function Scan({ d, report }) {
   const s = useDriveState();
   const res = s.scan && s.scan.number === d.number ? s.scan : null;
@@ -71,7 +87,7 @@ function Scan({ d, report }) {
   const p = busy ? s.progress : null;
   const run = async (mode) => {
     setState({ running: 'scan', progress: null, scan: null });
-    const out = await bridge.driveScan({ number: d.number, mode, sizeBytes: d.sizeBytes, media: d.media });
+    const out = await bridge.driveScan({ number: d.number, mode, sizeBytes: d.sizeBytes, media: d.media, volumes: d.volumes });
     setState({ running: '', progress: null, scan: { ...out, number: d.number } });
     if (out.ok && !out.stopped) {
       const bad = out.badBytes > 0;
@@ -87,6 +103,7 @@ function Scan({ d, report }) {
         {busy && <button type="button" className="btn" onClick={() => bridge.driveStop()}>■ Stop</button>}
         <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>Quick: under a minute, checks spots across the whole drive. Full: reads every sector{d.sizeBytes ? `, roughly ${dur(d.sizeBytes / 1e6 / (expectedSpeed(d).hdd ? 140 : 1500))}` : ''}.</span>
       </div>
+      {busy && !p && <div className="hint"><span className="dot wait" style={{ display: 'inline-block' }} /> Opening the drive…</div>}
       {(p || res) && (() => {
         const r = p || res;
         const pct = r.total ? Math.min(100, (r.done / r.total) * 100) : 0;
@@ -94,6 +111,7 @@ function Scan({ d, report }) {
           <div className={'drive-panel ' + (busy ? '' : r.error ? 'fail' : r.badBytes > 0 || r.slow > 10 ? 'fail' : r.stopped ? '' : 'pass')}>
             {r.error ? <span className="bad">{r.error}</span> : (
               <>
+                {r.map && <SectorMap map={r.map} />}
                 <div className="bar big"><div style={{ width: `${pct}%` }} /></div>
                 <span>
                   <b className="pixel" style={{ fontSize: 11 }}>{Math.floor(pct)}%</b>
@@ -101,6 +119,7 @@ function Scan({ d, report }) {
                 </span>
                 <span className={r.badBytes > 0 ? 'bad' : ''}>{r.badBytes > 0 ? `✕ ${Math.round(r.badBytes / 1024)} KB unreadable, around ${r.badSpots.map((m) => (m / 1000).toFixed(1) + ' GB').join(', ')}` : '✓ No unreadable sectors'}</span>
                 <span className={r.slow > 10 ? 'bad' : r.slow ? 'meh' : ''}>{r.slow ? `${r.slow} slow areas (weak sectors)` : 'No slow areas'}</span>
+                {r.note && <span className="muted">{r.note}</span>}
               </>
             )}
           </div>
@@ -154,7 +173,7 @@ function Speed({ d, report }) {
   );
 }
 
-// The scan / speed test changed in app 0.1.15; older app copies can't run them
+// The scan / speed test changed in app 0.1.16; older app copies can't run them
 const older = (v, than) => {
   const a = String(v || '0').split('.').map(Number);
   const b = than.split('.').map(Number);
@@ -188,11 +207,11 @@ export default function Drive({ step, report, model, setModel }) {
     <div className="tool" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Picker drives={s.drives} picked={s.picked} onPick={pick} />
       {d && step === 'health' && <Health d={d} report={report} />}
-      {d && step !== 'health' && shell && older(shell, '0.1.15') && <div className="warn">This test needs the newest app (v0.1.15 or later). Download it once from the latest release, then it keeps itself up to date.</div>}
-      {d && step === 'scan' && !(shell && older(shell, '0.1.15')) && (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
+      {d && step !== 'health' && shell && older(shell, '0.1.16') && <div className="warn">This test needs the newest app (v0.1.16 or later). Download it once from the latest release, then it keeps itself up to date.</div>}
+      {d && step === 'scan' && !(shell && older(shell, '0.1.16')) && (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
         ? <div className="hint">macOS doesn’t let apps read every sector, so the bad sector scan needs a Windows PC. On a Mac, rely on the health check and speed test.</div>
         : <Scan d={d} report={report} />)}
-      {d && step === 'speed' && !(shell && older(shell, '0.1.15')) && <Speed d={d} report={report} />}
+      {d && step === 'speed' && !(shell && older(shell, '0.1.16')) && <Speed d={d} report={report} />}
       {!d && s.drives.some((x) => !x.boot) && <span className="muted">Pick the drive above.</span>}
     </div>
   );

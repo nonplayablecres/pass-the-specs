@@ -351,3 +351,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 button.badge { background: transparent; font-family: inherit; }
 button.badge.on { background: var(--red); }
 .kb-full .k { font-size: 11px; padding: 4px 5px; overflow: hidden; }
+/* Sector map */
+.sector-wrap { display: flex; flex-direction: column; gap: 8px; }
+.sector-map { display: grid; grid-template-columns: repeat(40, 1fr); gap: 2px; }
+.sc { display: block; aspect-ratio: 1.6; background: var(--line); }
+.sc.g { background: var(--green); }
+.sc.s { background: var(--amber); }
+.sc.b { background: var(--red); }
+.sector-key { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; align-items: center; }
+.sector-key span { display: inline-flex; align-items: center; gap: 6px; }
+.sector-key .sc { width: 14px; aspect-ratio: auto; height: 9px; }

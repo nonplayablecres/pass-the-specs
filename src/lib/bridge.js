@@ -167,6 +167,8 @@ export const bridge = {
       await wait(150);
       res.done = (res.total * i) / 20; res.blocks = Math.round((total * i) / 20);
       if (i === 12 && opts.number === 2) { res.badBytes = 196608; res.badSpots = [81234]; res.slow = 3; }
+      const filled = Math.round((600 * i) / 20);
+      res.map = Array.from({ length: 600 }, (_, c) => (c >= filled ? '.' : opts.number === 2 && c === 290 ? 'b' : opts.number === 2 && (c === 120 || c === 121 || c === 455) ? 's' : 'g')).join('');
       mockProgress.forEach((fn) => fn({ ...res, speed: 1850, eta: (20 - i) * 0.15 }));
     }
     return { ok: true, ...res, stopped: mockStop, speed: 1850, seconds: 3 };
