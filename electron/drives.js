@@ -479,7 +479,7 @@ async function probe(checksDir, { number, sizeBytes }, send) {
     const d = list.ok ? list.drives.find((x) => Number(x.number) === n) : null;
     const cardBus = d && (/usb|^sd$|^mmc$/i.test(d.bus || '') || process.env.PTS_SELFTEST === '1');
     if (!d || d.boot || !cardBus || Math.abs(Number(d.sizeBytes) - Number(sizeBytes)) > 1e6) {
-      return { ok: false, error: 'Stopped for safety: that drive doesn’t look like a removable card or stick, so it wasn’t touched.' };
+      return { ok: false, error: 'Stopped for safety: that drive doesn’t look like a removable card or stick, so it wasn’t touched.', details: JSON.stringify({ found: !!d, bus: d && d.bus, boot: d && d.boot, size: d && d.sizeBytes, asked: sizeBytes, selftest: process.env.PTS_SELFTEST || null }) };
     }
   }
 
