@@ -187,7 +187,7 @@ function Speed({ d, report }) {
   );
 }
 
-// The scan / speed test changed in app 0.1.16; older app copies can't run them
+// The scan / speed test changed in app 0.1.17; older app copies can't run them
 const older = (v, than) => {
   const a = String(v || '0').split('.').map(Number);
   const b = than.split('.').map(Number);
@@ -221,11 +221,11 @@ export default function Drive({ step, report, model, setModel }) {
     <div className="tool" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Picker drives={s.drives} picked={s.picked} onPick={pick} />
       {d && step === 'health' && <Health d={d} report={report} />}
-      {d && step !== 'health' && shell && older(shell, '0.1.16') && <div className="warn">This test needs the newest app (v0.1.16 or later). Download it once from the latest release, then it keeps itself up to date.</div>}
-      {d && step === 'scan' && !(shell && older(shell, '0.1.16')) && (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
+      {d && step !== 'health' && shell && older(shell, '0.1.17') && <div className="warn">This test needs the newest app (v0.1.17 or later). Download it once from the latest release, then it keeps itself up to date.</div>}
+      {d && step === 'scan' && !(shell && older(shell, '0.1.17')) && (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
         ? <div className="hint">macOS doesn’t let apps read every sector, so the bad sector scan needs a Windows PC. On a Mac, rely on the health check and speed test.</div>
         : <Scan d={d} report={report} />)}
-      {d && step === 'speed' && !(shell && older(shell, '0.1.16')) && <Speed d={d} report={report} />}
+      {d && step === 'speed' && !(shell && older(shell, '0.1.17')) && <Speed d={d} report={report} />}
       {!d && s.drives.some((x) => !x.boot) && <span className="muted">Pick the drive above.</span>}
     </div>
   );
