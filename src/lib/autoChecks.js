@@ -4,6 +4,9 @@
 // Anything not listed here is a normal manual check.
 
 export const SETTINGS = {
+  // Mac colours as CeX writes them in listings (picked on the start screen).
+  // Only SB is confirmed so far; correct the others if CeX uses different codes.
+  macColours: [['SB', 'Space Black'], ['SG', 'Space Grey'], ['SL', 'Silver'], ['MN', 'Midnight'], ['ST', 'Starlight'], ['SKB', 'Sky Blue']],
   // Mobicode check page. Use {serial} where the serial number goes, e.g.
   // 'https://example-mobicode-site/check?serial={serial}'. Leave '' until you have it.
   mobicodeUrl: '',
@@ -43,7 +46,7 @@ export function parseListing(text) {
 
 export function shortCpu(name) {
   const m = String(name || '').match(CPU_RE);
-  return m ? m[1] : String(name || '').replace(/\(R\)|\(TM\)|CPU|@.*$/gi, '').replace(/\s+/g, ' ').trim();
+  return m ? m[1].replace(/^apple\s*/i, '') : String(name || '').replace(/\(R\)|\(TM\)|CPU|@.*$/gi, '').replace(/\s+/g, ' ').trim();
 }
 
 export function mainDisk(info) {
@@ -74,8 +77,22 @@ export function isCustomBuild(info, deviceType) {
   return BOARD_MAKERS.test(who) || SYSTEM_BUILDERS.test(who) || !info.manufacturer;
 }
 
+// Mac: "MacBook Pro 17,2" (model name + the numbers from the identifier "Mac17,2")
+function macName(info) {
+  const num = String(info.identifier || '').replace(/^[A-Za-z]+/, '');
+  return [info.machineName || 'Mac', num].filter(Boolean).join(' ');
+}
+
+// Apple sells 256GB / 512GB / 1TB..., but the drive reports 251GB / 500GB / 1000GB
+function macStorage(gb) {
+  const tiers = [128, 256, 512, 1000, 2000, 4000, 8000];
+  const t = tiers.reduce((a, b) => (Math.abs(b - gb) < Math.abs(a - gb) ? b : a));
+  return t >= 1000 ? t / 1000 + 'TB' : t + 'GB';
+}
+
 export function machineName(info, deviceType) {
   if (!info) return '';
+  if (info.platform === 'mac') return macName(info);
   if (isCustomBuild(info, deviceType)) return 'Custom';
   const brand = (BRANDS.find(([re]) => re.test(info.manufacturer || '')) || [null, (info.manufacturer || '').split(' ')[0]])[1];
   // Lenovo's real model name lives in productVersion
@@ -117,14 +134,27 @@ function osLabel(info) {
 
 // Snaps the measured screen size to the sizes CeX lists (14", 15.6", 16", 17.3"...).
 // Windows' measurement is a bit rough, so e.g. 15.3 becomes 15 and 15.5 becomes 15.6.
-const SCREEN_SIZES = [10, 10.1, 11, 11.6, 12, 12.5, 13, 13.3, 13.5, 14, 14.5, 15, 15.6, 16, 17, 17.3, 18];
+const SCREEN_SIZES = [10, 10.1, 11, 11.6, 12, 12.5, 13, 13.3, 13.5, 13.6, 14, 14.5, 15, 15.6, 16, 17, 17.3, 18];
 export function screenSize(inches) {
   if (!inches) return null;
   return SCREEN_SIZES.reduce((best, s) => (Math.abs(s - inches) < Math.abs(best - inches) - 0.001 ? s : best), SCREEN_SIZES[0]);
 }
 
-export function cexTitle(info, deviceType) {
+export function cexTitle(info, deviceType, opts = {}) {
   if (!info) return '';
+  // Mac:  MacBook Pro 17,2/M5 (10-CPU 10-GPU)/16GB Ram/512GB SSD/14"/SB
+  if (info.platform === 'mac') {
+    const d = mainDisk(info);
+    const cores = info.cpuCores && info.gpuCores ? ` (${info.cpuCores}-CPU ${info.gpuCores}-GPU)` : '';
+    return [
+      macName(info),
+      shortCpu(info.cpu) + cores,
+      info.ramGB ? info.ramGB + 'GB Ram' : null,
+      d ? macStorage(d.sizeGB) + ' SSD' : null,
+      info.screenInches ? `${screenSize(info.screenInches)}"` : null,
+      opts.colour || null
+    ].filter(Boolean).join('/');
+  }
   const d = mainDisk(info);
   const laptop = deviceType === 'laptop' || info.chassis === 'laptop';
   const custom = isCustomBuild(info, deviceType);

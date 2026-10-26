@@ -20,6 +20,7 @@ export default function App() {
   const [device, setDevice] = useState('laptop');
   const [listing, setListing] = useState('');
   const [boxId, setBoxId] = useState('');
+  const [colour, setColour] = useState('');
   const [manual, setManual] = useState({});
   const [startedAt, setStartedAt] = useState(null);
   const [finishedAt, setFinishedAt] = useState(null);
@@ -61,7 +62,7 @@ export default function App() {
   const autoPass = checks.filter((c) => isAuto(c.id) && auto[c.id].status === 'pass').length;
   const autoFail = checks.filter((c) => isAuto(c.id) && auto[c.id].status === 'fail').length;
   const specDiff = auto.m5 && auto.m5.status === 'diff' ? auto.m5 : null;
-  const title = isComputer ? cexTitle(scan.info, device) : '';
+  const title = isComputer ? cexTitle(scan.info, device, { colour }) : '';
 
   const rows = checks.filter((c) => !c.final).map((c) => {
     const a = auto[c.id];
@@ -95,7 +96,7 @@ export default function App() {
 
   const start = () => { setManual({}); setStartedAt(Date.now()); setFinishedAt(null); setScreen('run'); };
   const finish = () => { setFinishedAt((f) => f || Date.now()); setScreen('result'); };
-  const newTest = () => { setLookup(null); setResetAt(null); setManual({}); setListing(''); setBoxId(''); setStartedAt(null); setFinishedAt(null); setScreen('start'); runScan(true); };
+  const newTest = () => { setColour(''); setLookup(null); setResetAt(null); setManual({}); setListing(''); setBoxId(''); setStartedAt(null); setFinishedAt(null); setScreen('start'); runScan(true); };
 
   const deviceLabel = screen === 'start' ? null
     : isComputer && scan.info ? (machineName(scan.info, device) === 'Custom' ? 'Custom PC' : machineName(scan.info, device))
@@ -135,7 +136,7 @@ export default function App() {
       <Header deviceLabel={deviceLabel} startedAt={screen === 'start' ? null : startedAt} finishedAt={finishedAt} right={headerRight} version={appInfo.uiVersion} />
 
       {screen === 'start' && (
-        <Start scan={scan} detectedType={detectedType} title={title} specDiff={specDiff} device={device} setDevice={setDevice} listing={listing} setListing={setListing} boxId={boxId} setBoxId={setBoxId} counts={counts} onStart={start} />
+        <Start colour={colour} setColour={setColour} scan={scan} detectedType={detectedType} title={title} specDiff={specDiff} device={device} setDevice={setDevice} listing={listing} setListing={setListing} boxId={boxId} setBoxId={setBoxId} counts={counts} onStart={start} />
       )}
       {screen === 'run' && (
         <Runner items={manualItems} results={manual} setResult={setResult} setNote={setNote} onFinish={finish} isMac={device === 'mac'} info={isComputer ? scan.info : null} />

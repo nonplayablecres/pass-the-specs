@@ -1,8 +1,8 @@
 import { DEVICE_TYPES, checksFor } from '../data/checklists.js';
-import { parseListing } from '../lib/autoChecks.js';
+import { SETTINGS, parseListing } from '../lib/autoChecks.js';
 import Battery from '../components/Battery.jsx';
 
-export default function Start({ scan, detectedType, title, specDiff, device, setDevice, listing, setListing, boxId, setBoxId, counts, onStart }) {
+export default function Start({ colour, setColour, scan, detectedType, title, specDiff, device, setDevice, listing, setListing, boxId, setBoxId, counts, onStart }) {
   const parsed = parseListing(listing);
   const info = scan.info;
   const current = DEVICE_TYPES.find((d) => d.id === device);
@@ -66,6 +66,19 @@ export default function Start({ scan, detectedType, title, specDiff, device, set
                 </span>
               )}
             </label>
+          </div>
+        )}
+
+        {isComputer && info && info.platform === 'mac' && (
+          <div className="field">Colour
+            <div className="grades" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
+              {SETTINGS.macColours.map(([code, name]) => (
+                <button key={code} type="button" className={'grade' + (colour === code ? ' on' : '')} aria-pressed={colour === code} onClick={() => setColour(colour === code ? '' : code)}>
+                  <span style={{ fontSize: 13 }}>{name}</span>
+                  <span className="pixel" style={{ fontSize: 9 }}>{code}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

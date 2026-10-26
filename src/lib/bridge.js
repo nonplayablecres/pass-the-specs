@@ -49,6 +49,15 @@ const MOCK_ASUS = {
   encryption: { state: 'off', detail: 'BitLocker off' }
 };
 
+// ?mac in the preview address shows a MacBook
+const MOCK_MAC = {
+  ...MOCK, platform: 'mac', manufacturer: 'Apple', machineName: 'MacBook Pro', identifier: 'Mac17,2', model: 'MacBook Pro Mac17,2',
+  cpu: 'Apple M5', cpuCores: 10, gpuCores: 10, ramGB: 16, screenInches: 14.2, gpus: [],
+  disks: [{ name: 'APPLE SSD', sizeGB: 500, type: 'SSD', health: 'Healthy' }], os: { name: 'macOS 26.1', version: '26.1' },
+  encryption: { state: 'off', detail: 'FileVault is Off.' }, management: { known: true, mdm: false, dep: false },
+  findMy: { known: true, on: false }, battery: { present: true, healthPct: 100, cycles: 12 }, fingerprint: true, cardReader: true, biosPassword: undefined
+};
+
 // Open the browser preview with ?custom on the end to see a custom-built desktop
 const MOCK_CUSTOM = {
   ...MOCK,
@@ -76,7 +85,7 @@ export const bridge = {
     if (hasShell) return window.pts.systemInfo();
     await new Promise((r) => setTimeout(r, 700));
     const q = window.location.search;
-    return { ok: true, info: /custom/.test(q) ? MOCK_CUSTOM : /asus/.test(q) ? MOCK_ASUS : MOCK, mock: true };
+    return { ok: true, info: /custom/.test(q) ? MOCK_CUSTOM : /asus/.test(q) ? MOCK_ASUS : /mac/.test(q) ? MOCK_MAC : MOCK, mock: true };
   },
   async appInfo() {
     if (hasShell) return window.pts.appInfo();
@@ -107,6 +116,10 @@ export const bridge = {
     const q = window.location.search;
     const hits = /custom/i.test(query) ? custom : /none/.test(q) ? [] : /near/.test(q) ? dell.filter((d) => !d.boxName.includes('/8GB')) : dell;
     return { ok: true, hits, mock: true };
+  },
+  async touchId(action) {
+    if (hasShell && window.pts.touchId) return window.pts.touchId(action);
+    return { ok: false, supported: false };
   },
   async batteryReport(name) {
     if (hasShell && window.pts.batteryReport) return window.pts.batteryReport(name);

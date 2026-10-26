@@ -12,6 +12,7 @@ import Stress from '../tools/Stress.jsx';
 import Ports from '../tools/Ports.jsx';
 import Card from '../tools/Card.jsx';
 import Mobicode from '../tools/Mobicode.jsx';
+import Fingerprint from '../tools/Fingerprint.jsx';
 
 function Tool({ check, isMac, info, report }) {
   switch (check.tool) {
@@ -28,6 +29,7 @@ function Tool({ check, isMac, info, report }) {
     case 'ports': return <Ports />;
     case 'card': return <Card report={report} />;
     case 'mobicode': return <Mobicode info={info} />;
+    case 'fingerprint': return <Fingerprint report={report} isMac={isMac} />;
     default: return null;
   }
 }

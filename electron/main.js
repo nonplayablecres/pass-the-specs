@@ -166,6 +166,21 @@ ipcMain.handle('pts:save-report', async (_e, { name, text }) => {
   }
 });
 
+// Touch ID test on a Mac: asks for a fingerprint, returns whether it worked
+ipcMain.handle('pts:touch-id', async (_e, action) => {
+  if (process.platform !== 'darwin') return { ok: false, supported: false };
+  const { systemPreferences } = require('electron');
+  const can = systemPreferences.canPromptTouchID();
+  if (action !== 'prompt') return { ok: true, supported: true, ready: can };
+  if (!can) return { ok: false, supported: true, ready: false, error: 'No fingerprints set up' };
+  try {
+    await systemPreferences.promptTouchID('test the fingerprint reader');
+    return { ok: true, supported: true, ready: true, passed: true };
+  } catch (err) {
+    return { ok: false, supported: true, ready: true, passed: false, error: err.message };
+  }
+});
+
 // Saves Windows' own battery report (an HTML page) into the reports folder on the stick
 ipcMain.handle('pts:battery-report', async (_e, name) => {
   if (process.platform !== 'win32') return { ok: false, error: 'Windows only' };

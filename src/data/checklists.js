@@ -38,7 +38,7 @@ export const COMPUTER_CHECKS = [
   { id: 'm10', section: M, title: 'Remote management', how: 'Not enrolled in any company management (Intune, Azure AD, domain, MDM).' },
   { id: 'm11', section: M, title: 'Functionality (stress test)', how: 'Pushes the processor, graphics and memory hard for a minute. Watches for freezes, crashes and overheating slow-downs.', tool: 'stress' },
   { id: 'm12', section: M, title: 'Trackpad + input', how: 'Move, tap, click both buttons and two-finger scroll in the box.', tool: 'trackpad' },
-  { id: 'm13', section: M, title: 'Fingerprint scanner', how: 'Add a finger in Windows Hello / Touch ID, then remove it.' },
+  { id: 'm13', section: M, title: 'Fingerprint scanner', how: 'Check the fingerprint reader recognises a finger.', tool: 'fingerprint' },
   { id: 'm14', section: M, title: 'Keyboard', how: 'Press every key. Each one lights red when it registers. Click a key to mark it by hand.', tool: 'keys' },
   { id: 'm15', section: M, title: 'Touchscreen', how: 'Drag your finger over every square until the whole grid is red.', tool: 'touch' },
   { id: 'm16', section: M, title: 'Screen', how: 'Show each colour full screen. Look for dead pixels, lines or bleed. Click to change colour, Esc to exit.', tool: 'screen' },
