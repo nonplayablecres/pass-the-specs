@@ -18,6 +18,16 @@ app.whenReady().then(async () => {
     const cap = await drives.capacity('', { volumes: d.volumes, limitBytes: 256 * 1024 * 1024 }, () => {});
     say('capacity', JSON.stringify({ ok: cap.ok, error: cap.error, written: cap.written, bad: cap.badBytes, cached: cap.cached, secs: Math.round(cap.seconds) }));
     if (letter) {
+      // How does opening the card for writing behave inside Electron?
+      const ofs = require('original-fs');
+      const dev = `\\\\.\\PhysicalDrive${d.number}`;
+      const tries = [];
+      for (const [label, mod, flag] of [['fs r+', require('fs'), 'r+'], ['original-fs r+', ofs, 'r+'], ['fs r', require('fs'), 'r'], ['original-fs rs+', ofs, 'rs+']]) {
+        try { const fd = mod.openSync(dev, flag); mod.closeSync(fd); tries.push(label + ' ok'); } catch (e) { tries.push(`${label} ${e.code} ${e.errno}`); }
+      }
+      say('open', tries.join(' | '));
+      const ps = require('child_process').spawnSync('powershell', ['-NoProfile', '-Command', `Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class K{[DllImport("kernel32.dll",SetLastError=true,CharSet=CharSet.Unicode)]public static extern IntPtr CreateFile(string a,uint b,uint c,IntPtr d,uint e,uint f,IntPtr g);}'; $h=[K]::CreateFile('${dev.replace(/\\/g, '\\')}',0xC0000000,3,[IntPtr]::Zero,3,0x02000000,[IntPtr]::Zero); "handle=$h err=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"`]);
+      say('createfile', String(ps.stdout || ps.stderr).trim());
       const pr = await drives.probe(path.join(__dirname, '..', 'public', 'checks'), { number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes }, () => {});
       say('probe', JSON.stringify({ ok: pr.ok, error: pr.error, details: pr.details, bad: pr.badSpots, real: pr.realBytes, warning: pr.warning, restored: pr.restored, retries: pr.retries, details: pr.details, secs: pr.seconds }));
     }
