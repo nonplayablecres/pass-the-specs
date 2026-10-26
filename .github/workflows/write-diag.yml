@@ -1,0 +1,49 @@
+name: Write diag
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Raw write variants on a virtual card
+        shell: pwsh
+        run: |
+          "create vdisk file=`"$env:RUNNER_TEMP\card.vhdx`" maximum=1024 type=expandable`nattach vdisk`ncreate partition primary`nformat fs=exfat quick label=CARD`nassign letter=V" | Set-Content dp.txt
+          diskpart /s dp.txt | Out-Null
+          $n = (Get-Partition -DriveLetter V).DiskNumber
+          $js = @'
+          const fs = require('fs'); const { execFileSync } = require('child_process');
+          const n = process.argv[2]; const out = [];
+          const dis = () => { try { execFileSync('fsutil', ['volume', 'dismount', 'V:']); return 'dismounted'; } catch (e) { return 'dismount failed'; } };
+          const tryWrite = async (label, p, flags, off, pre) => {
+            let step = 'open';
+            try {
+              if (pre) pre();
+              const b = Buffer.alloc(65536, 7);
+              if (flags === 'sync') { const fd = fs.openSync(p, 'r+'); step = 'write'; fs.writeSync(fd, b, 0, b.length, off); fs.closeSync(fd); }
+              else { const h = await fs.promises.open(p, flags); step = 'read'; await h.read(b, 0, 4096, off); step = 'write'; await h.write(b, 0, b.length, off); await h.close(); }
+              out.push(label + ': ok');
+            } catch (e) { out.push(label + ': ' + step + ' ' + e.code + ' ' + e.errno); }
+          };
+          (async () => {
+            const disk = '\\\\.\\PhysicalDrive' + n;
+            const inVol = 64 * 1048576;
+            await tryWrite('disk r+ mounted', disk, 'r+', inVol);
+            await tryWrite('disk r+ dismounted', disk, 'r+', inVol, dis);
+            await tryWrite('disk O_RDWR num dismounted', disk, fs.constants.O_RDWR, inVol, dis);
+            await tryWrite('disk sync dismounted', disk, 'sync', inVol, dis);
+            await tryWrite('disk r+ outside volume (offset 4096)', disk, 'r+', 4096);
+            await tryWrite('volume r+ dismounted', '\\\\.\\V:', 'r+', 32 * 1048576, dis);
+            await tryWrite('volume sync dismounted', '\\\\.\\V:', 'sync', 32 * 1048576, dis);
+            out.forEach((l) => console.log('::notice title=w::' + l));
+          })();
+          '@
+          Set-Content t.js $js
+          node t.js $n
+          $o = "select vdisk file=`"$env:RUNNER_TEMP\card.vhdx`"`nattributes disk clear readonly`noffline disk`nonline disk" | Set-Content dp2.txt
+          Write-Output "::notice title=attrs::$((Get-Disk -Number $n | Select-Object IsReadOnly,IsOffline,BusType,PartitionStyle | ConvertTo-Json -Compress))"
