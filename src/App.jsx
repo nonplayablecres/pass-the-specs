@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Header from './components/Header.jsx';
 import Start from './screens/Start.jsx';
 import Runner from './screens/Runner.jsx';
@@ -17,7 +17,12 @@ export default function App() {
   const [appInfo, setAppInfo] = useState({ uiVersion: __APP_VERSION__ });
   const [update, setUpdate] = useState(null);
   const [screen, setScreen] = useState('start');
-  const [device, setDevice] = useState('laptop');
+  const [device, setDeviceState] = useState('laptop');
+  // Once the tester picks a type, or a test has started, the scan must not change it
+  const pickedByHand = useRef(false);
+  const screenRef = useRef('start');
+  const setDevice = useCallback((d) => { pickedByHand.current = true; setDeviceState(d); }, []);
+  const autoDevice = (d) => { if (!pickedByHand.current && screenRef.current === 'start') setDeviceState(d); };
   const [listing, setListing] = useState('');
   const [boxId, setBoxId] = useState('');
   const [colour, setColour] = useState('');
@@ -31,9 +36,9 @@ export default function App() {
     if (res && res.ok) {
       setScan({ loading: false, info: res.info, error: '', mock: !!res.mock });
       if (pickDevice) {
-        if (res.info.platform === 'mac') setDevice('mac');
-        else if (res.info.chassis === 'laptop' || res.info.chassis === 'desktop') setDevice(res.info.chassis);
-        else setDevice(res.info.battery && res.info.battery.present === false ? 'desktop' : 'laptop');
+        if (res.info.platform === 'mac') autoDevice('mac');
+        else if (res.info.chassis === 'laptop' || res.info.chassis === 'desktop') autoDevice(res.info.chassis);
+        else autoDevice(res.info.battery && res.info.battery.present === false ? 'desktop' : 'laptop');
       }
     } else {
       setScan({ loading: false, info: null, error: (res && res.error) || 'Unknown error', mock: false });
@@ -46,6 +51,7 @@ export default function App() {
     return bridge.onUpdate(setUpdate);
   }, [runScan]);
 
+  screenRef.current = screen;
   const dev = DEVICE_TYPES.find((d) => d.id === device);
   const isComputer = dev && dev.list === 'computer';
   const checks = checksFor(device);
@@ -96,7 +102,7 @@ export default function App() {
 
   const start = () => { setManual({}); setStartedAt(Date.now()); setFinishedAt(null); setScreen('run'); };
   const finish = () => { setFinishedAt((f) => f || Date.now()); setScreen('result'); };
-  const newTest = () => { setColour(''); setLookup(null); setResetAt(null); setManual({}); setListing(''); setBoxId(''); setStartedAt(null); setFinishedAt(null); setScreen('start'); runScan(true); };
+  const newTest = () => { pickedByHand.current = false; screenRef.current = 'start'; setColour(''); setLookup(null); setResetAt(null); setManual({}); setListing(''); setBoxId(''); setStartedAt(null); setFinishedAt(null); setScreen('start'); runScan(true); };
 
   const deviceLabel = screen === 'start' ? null
     : isComputer && scan.info ? (machineName(scan.info, device) === 'Custom' ? 'Custom PC' : machineName(scan.info, device))

@@ -79,8 +79,15 @@ export function isCustomBuild(info, deviceType) {
 
 // Mac: "MacBook Pro 17,2" (model name + the numbers from the identifier "Mac17,2")
 function macName(info) {
-  const num = String(info.identifier || '').replace(/^[A-Za-z]+/, '');
-  return [info.machineName || 'Mac', num].filter(Boolean).join(' ');
+  let name = info.machineName;
+  let id = info.identifier;
+  // Older app versions only send "MacBook Pro Mac17,2": split it up
+  if (!name || !id) {
+    const m = String(info.model || '').match(/^(.*?)\s*((?:Mac|MacBook\w*|iMac\w*)\d+,\d+)$/);
+    if (m) { name = name || m[1]; id = id || m[2]; }
+  }
+  const num = String(id || '').replace(/^[A-Za-z]+/, '');
+  return [name || 'Mac', num].filter(Boolean).join(' ');
 }
 
 // Apple sells 256GB / 512GB / 1TB..., but the drive reports 251GB / 500GB / 1000GB

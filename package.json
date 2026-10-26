@@ -8,7 +8,7 @@
   "main": "electron/main.js",
   "pts": {
     "githubRepo": "nonplayablecres/pass-the-specs",
-    "minShell": "0.1.0"
+    "minShell": "0.1.8"
   },
   "scripts": {
     "dev": "concurrently -k -n ui,app -c red,gray \"vite\" \"wait-on tcp:5173 && cross-env PTS_DEV=1 electron .\"",

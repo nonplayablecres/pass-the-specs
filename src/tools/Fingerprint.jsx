@@ -15,6 +15,9 @@ export default function Fingerprint({ report, isMac }) {
     return <div className="hint">Settings → Accounts → Sign-in options → Fingerprint (Windows Hello). Add a finger, check it unlocks, then remove it.</div>;
   }
   if (state.checking) return <div className="hint">Checking Touch ID…</div>;
+  if (!state.supported) {
+    return <div className="hint">This copy of the app is too old to test Touch ID by itself. Download the latest app. For now: System Settings → Touch ID &amp; Password, check a finger unlocks, then press Pass.</div>;
+  }
 
   const test = async () => {
     const r = await bridge.touchId('prompt');

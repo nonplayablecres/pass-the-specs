@@ -128,7 +128,7 @@ checks your Releases, quietly downloads the new version into a `pts-ui`
 folder next to the exe on the stick, and shows **"Update downloaded · LOAD IT
 NOW"**. No re-downloading the exe.
 
-**The rare exception:** the screens, checks and the Windows scan all
+**Important for whoever edits the code:** the screens, checks and the Windows scan all
 auto-update. If you ever change files in the `electron` folder (the bit that
 opens the window and runs the scan), the old exe can't use that. In that case,
 also set `"minShell"` in `package.json` to the new version number before
