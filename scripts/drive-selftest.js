@@ -16,7 +16,7 @@ app.whenReady().then(async () => {
     const sp = await drives.speed('', { number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes, flash: !!letter }, () => {});
     say('speed', JSON.stringify(sp));
     if (letter) {
-      const pr = await drives.probe('', { number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes }, () => {});
+      const pr = await drives.probe(path.join(__dirname, '..', 'public', 'checks'), { number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes }, () => {});
       say('probe', JSON.stringify({ ok: pr.ok, error: pr.error, details: pr.details, bad: pr.badSpots, real: pr.realBytes, warning: pr.warning, restored: pr.restored, retries: pr.retries, details: pr.details, secs: pr.seconds }));
     }
     const cap = await drives.capacity('', { volumes: d.volumes, limitBytes: 256 * 1024 * 1024 }, () => {});
