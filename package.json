@@ -58,7 +58,7 @@
       "target": "zip",
       "category": "public.app-category.utilities",
       "artifactName": "PassTheSpecs-mac-${arch}.${ext}",
-      "identity": null
+      "identity": "-"
     }
   }
 }
