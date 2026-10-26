@@ -494,11 +494,22 @@ async function probe(checksDir, { number, sizeBytes }, send) {
   const res = { ok: true, spots: SPOTS, badSpots: 0, firstBad: null, lastGood: 0, wiped: false, formatted: false };
   job = { stop: false };
 
+  // Open the card BEFORE wiping it and keep it open: straight after a wipe Windows can
+  // refuse to open it at all
+  let fd = null;
+  const devPath = testFile || `\\\\.\\PhysicalDrive${n}`;
+  for (let attempt = 0; fd == null; attempt++) {
+    try { fd = fs.openSync(devPath, 'r+'); } catch (err) {
+      if (attempt >= 5) { job = null; return { ok: false, error: `Windows wouldn’t open the card (${errText(err)}).` }; }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
+
   // 1. Wipe
   tell('wipe', 0);
   if (!testFile) {
     const w = await diskpart([`select disk ${n}`, 'clean']);
-    if (!w.ok) { job = null; return { ok: false, error: 'Windows wouldn’t wipe the card (is it write-protected? check the lock switch).', details: w.out.slice(-600) }; }
+    if (!w.ok) { fs.closeSync(fd); job = null; return { ok: false, error: 'Windows wouldn’t wipe the card (is it write-protected? check the lock switch).', details: w.out.slice(-600) }; }
     res.wiped = true;
   }
 
@@ -512,17 +523,7 @@ async function probe(checksDir, { number, sizeBytes }, send) {
   // Windows only accepts writes to a disk through the plain (non-promise) file calls,
   // so this uses those, pausing between spots to keep the app responsive
   const pause = () => new Promise((r) => setImmediate(r));
-  let fd = null;
   try {
-    const p = testFile || `\\\\.\\PhysicalDrive${n}`;
-    // Straight after a wipe Windows is still settling the card, so give it a few tries
-    for (let attempt = 0; fd == null; attempt++) {
-      try { fd = fs.openSync(p, 'r+'); } catch (err) {
-        if (attempt >= 20) throw new Error(`couldn’t open the card (${errText(err)})`);
-        await new Promise((r) => setTimeout(r, 500));
-      }
-    }
-    res.openTries = 0;
     // 2. Marker at every spot, then make sure it has really reached the card
     for (let i = 0; i < SPOTS; i++) {
       await pause();
