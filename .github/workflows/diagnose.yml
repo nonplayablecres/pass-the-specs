@@ -28,10 +28,15 @@ jobs:
             if ((Test-Path $n) -and ((Get-FileHash $_.FullName).Hash -eq (Get-FileHash $n).Hash)) { $same++ } else { $diff += $rel }
           }
           Write-Output "::notice title=binaries::same=$same diff=$($diff -join ',')"
-          $oldExe = [IO.File]::ReadAllBytes((Resolve-Path old/x/PassTheSpecs.exe))
-          $newExe = [IO.File]::ReadAllBytes((Resolve-Path "$new/PassTheSpecs.exe"))
+          $oldExe = [IO.File]::ReadAllBytes((Resolve-Path "old/x/Pass the Specs.exe"))
+          $newExe = [IO.File]::ReadAllBytes((Resolve-Path "$new/Pass the Specs.exe"))
+          $eo = [IO.File]::ReadAllBytes((Resolve-Path old/x/resources/elevate.exe)); $en = [IO.File]::ReadAllBytes((Resolve-Path "$new/resources/elevate.exe"))
+          Write-Output "::notice title=elevate::old=$($eo.Length) new=$($en.Length) oldVer=$((Get-Item old/x/resources/elevate.exe).VersionInfo.FileVersion) newVer=$((Get-Item "$new/resources/elevate.exe").VersionInfo.FileVersion)"
+          Write-Output "::notice title=exever::old=$((Get-Item 'old/x/Pass the Specs.exe').VersionInfo.FileVersion)/$((Get-Item 'old/x/Pass the Specs.exe').VersionInfo.ProductVersion) new=$((Get-Item "$new/Pass the Specs.exe").VersionInfo.FileVersion)"
           $count = 0; $first = -1
           for ($i = 0; $i -lt [Math]::Min($oldExe.Length, $newExe.Length); $i++) { if ($oldExe[$i] -ne $newExe[$i]) { $count++; if ($first -lt 0) { $first = $i } } }
+          $ranges = @(); $prev = -10; for ($i = 0; $i -lt [Math]::Min($oldExe.Length, $newExe.Length); $i++) { if ($oldExe[$i] -ne $newExe[$i]) { if ($i -gt $prev + 64) { $ranges += $i }; $prev = $i } }
+          Write-Output "::notice title=ranges::$($ranges.Count) regions: $(($ranges | Select-Object -First 15) -join ',')"
           $txt = [Text.Encoding]::Unicode.GetString($newExe)
           $integ = $txt.Contains('Integrity') -or [Text.Encoding]::ASCII.GetString($newExe).Contains('ElectronAsarIntegrity')
           Write-Output "::notice title=exe::oldLen=$($oldExe.Length) newLen=$($newExe.Length) bytesDiffer=$count firstAt=$first integrity=$integ"
