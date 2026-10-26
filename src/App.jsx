@@ -26,6 +26,7 @@ export default function App() {
   const [listing, setListing] = useState('');
   const [boxId, setBoxId] = useState('');
   const [colour, setColour] = useState('');
+  const [jumpTo, setJumpTo] = useState(null);
   const [manual, setManual] = useState({});
   const [startedAt, setStartedAt] = useState(null);
   const [finishedAt, setFinishedAt] = useState(null);
@@ -145,7 +146,7 @@ export default function App() {
         <Start colour={colour} setColour={setColour} scan={scan} detectedType={detectedType} title={title} specDiff={specDiff} device={device} setDevice={setDevice} listing={listing} setListing={setListing} boxId={boxId} setBoxId={setBoxId} counts={counts} onStart={start} />
       )}
       {screen === 'run' && (
-        <Runner items={manualItems} results={manual} setResult={setResult} setNote={setNote} onFinish={finish} isMac={device === 'mac'} info={isComputer ? scan.info : null} />
+        <Runner key={jumpTo || 'run'} startAt={jumpTo} items={manualItems} results={manual} setResult={setResult} setNote={setNote} onFinish={finish} isMac={device === 'mac'} info={isComputer ? scan.info : null} />
       )}
       {screen === 'result' && (
         <Result
@@ -160,7 +161,8 @@ export default function App() {
           setBoxId={setBoxId}
           elapsed={(finishedAt || Date.now()) - (startedAt || Date.now())}
           version={appInfo.uiVersion}
-          onBack={() => { setFinishedAt(null); setScreen('run'); }}
+          onBack={() => { setJumpTo(null); setFinishedAt(null); setScreen('run'); }}
+          onRetest={(id) => { setJumpTo(id); setFinishedAt(null); setScreen('run'); }}
           onNew={newTest}
           onReset={hasReset ? () => setScreen('reset') : null}
           resetAt={resetAt}

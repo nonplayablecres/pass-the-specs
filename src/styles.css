@@ -149,6 +149,17 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .trigger .bar { flex: 1; height: 10px; background: var(--bg); border: 1px solid var(--line-strong); }
 .trigger .bar div { height: 100%; background: var(--red); }
 
+/* All checks list */
+.checklist-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0, 0, 0, 0.6); display: flex; justify-content: flex-end; }
+.checklist { width: 420px; max-width: 100%; height: 100%; overflow-y: auto; background: var(--bg-deep); border-left: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 2px; }
+.checklist-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px 12px; }
+.checklist-row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; background: transparent; border: 1px solid transparent; color: var(--text); font-size: 15px; font-weight: 600; }
+.checklist-row:hover { background: var(--panel); }
+.checklist-row.current { background: var(--panel); border-color: var(--line-strong); }
+.cl-mark { width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 900; border: 1px solid var(--line-strong); color: var(--text-2); }
+.cl-mark.pass { background: var(--green); border-color: var(--green); color: #fff; }
+.cl-mark.fail { background: var(--red); border-color: var(--red); color: #fff; }
+
 /* Controller layout */
 .pad-layout { display: flex; flex-direction: column; gap: 18px; padding: 18px; background: var(--bg); border: 2px solid var(--line-strong); max-width: 720px; margin: 0 auto; }
 .pad-top { display: flex; justify-content: space-between; gap: 16px; }

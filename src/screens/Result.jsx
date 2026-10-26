@@ -54,7 +54,7 @@ function ListingPanel({ lookup, title, boxId, setBoxId, chosen }) {
 }
 
 // rows: every check with { id, title, status, detail, note, auto }
-export default function Result({ battery, rows, deviceName, listingName, specDiff, title, boxId, setBoxId, lookup, elapsed, version, onBack, onNew, onReset, resetAt, reportName, onReportText, copy }) {
+export default function Result({ onRetest, battery, rows, deviceName, listingName, specDiff, title, boxId, setBoxId, lookup, elapsed, version, onBack, onNew, onReset, resetAt, reportName, onReportText, copy }) {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(null);
   const [battReport, setBattReport] = useState(null);
@@ -140,12 +140,13 @@ export default function Result({ battery, rows, deviceName, listingName, specDif
                     <span style={{ fontSize: 17, fontWeight: 700 }}>{r.title}</span>
                     {(r.detail || r.note) && <span style={{ fontSize: 14, color: '#c4c4cc' }}>{[r.detail, r.note].filter(Boolean).join(' · ')}</span>}
                   </div>
-                  {r.auto && <span className="muted" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em' }}>AUTO</span>}
+                  {r.auto ? <span className="muted" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em' }}>AUTO · RE-SCAN TO RECHECK</span>
+                    : <button type="button" className="btn" style={{ minHeight: 40, padding: '0 14px' }} onClick={() => onRetest(r.id)}>RE-TEST</button>}
                 </div>
               ))}
               {open.map((r) => (
                 <div className="issue" key={r.id} style={{ background: 'var(--panel)', borderColor: 'var(--line)' }}>
-                  <b style={{ color: 'var(--muted)' }}>?</b><span style={{ flex: 1, fontSize: 17, fontWeight: 700 }}>{r.title}</span><span className="muted" style={{ fontSize: 13 }}>Not checked</span>
+                  <b style={{ color: 'var(--muted)' }}>?</b><span style={{ flex: 1, fontSize: 17, fontWeight: 700 }}>{r.title}</span><button type="button" className="btn" style={{ minHeight: 40, padding: '0 14px' }} onClick={() => onRetest(r.id)}>DO IT NOW</button>
                 </div>
               ))}
             </div>

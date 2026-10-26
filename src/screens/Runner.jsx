@@ -36,9 +36,11 @@ function Tool({ check, isMac, info, report }) {
 
 // items: the checks that need a person. Anything not applicable was already
 // detected and skipped, so the only answers are Pass or Fail.
-export default function Runner({ items, results, setResult, setNote, onFinish, isMac, info }) {
+export default function Runner({ items, results, setResult, setNote, onFinish, isMac, info, startAt }) {
   const firstOpen = items.findIndex((c) => !results[c.id]);
-  const [idx, setIdx] = useState(firstOpen === -1 ? items.length : firstOpen);
+  const jump = startAt ? items.findIndex((c) => c.id === startAt) : -1;
+  const [idx, setIdx] = useState(jump !== -1 ? jump : firstOpen === -1 ? items.length : firstOpen);
+  const [listOpen, setListOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const check = items[idx];
   const resultsRef = useRef(results);
@@ -113,6 +115,7 @@ export default function Runner({ items, results, setResult, setNote, onFinish, i
 
             <div className="card-foot">
               <button type="button" className="link-btn" onClick={() => { setIdx((i) => Math.max(0, i - 1)); setNoteOpen(false); }} disabled={idx === 0}>← Previous</button>
+              <button type="button" className="link-btn" onClick={() => setListOpen(true)}>☰ All checks</button>
               {noteOpen || (r && r.note) ? (
                 <input className="note-input" autoFocus={noteOpen} placeholder="Note, e.g. small scratch on lid" value={(r && r.note) || ''} onChange={(e) => setNote(check.id, e.target.value)} />
               ) : (
@@ -128,6 +131,28 @@ export default function Runner({ items, results, setResult, setNote, onFinish, i
           </div>
         )}
       </main>
+
+      {listOpen && (
+        <div className="checklist-overlay" role="dialog" aria-label="All checks" onClick={() => setListOpen(false)}>
+          <div className="checklist" onClick={(e) => e.stopPropagation()}>
+            <div className="checklist-head">
+              <span className="eyebrow" style={{ color: 'var(--text)' }}>All checks</span>
+              <button type="button" className="link-btn" onClick={() => setListOpen(false)}>Close ✕</button>
+            </div>
+            {items.map((c, i) => {
+              const res = results[c.id];
+              const st = res ? res.status : null;
+              return (
+                <button key={c.id} type="button" className={'checklist-row' + (i === idx ? ' current' : '')} onClick={() => { setIdx(i); setNoteOpen(false); setListOpen(false); }}>
+                  <span className={'cl-mark ' + (st || '')}>{st === 'pass' ? '✓' : st === 'fail' ? '✕' : i === idx ? '●' : ''}</span>
+                  <span style={{ flex: 1, textAlign: 'left' }}>{c.title}</span>
+                  <span className="muted" style={{ fontSize: 12 }}>{st === 'pass' ? 'Passed' : st === 'fail' ? 'Failed' : 'To do'}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </>
   );
 }
