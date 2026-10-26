@@ -184,16 +184,42 @@ try { $sb = Confirm-SecureBootUEFI -ErrorAction Stop } catch { $sb = $null }
 $r.secureBoot = $sb
 
 # --- Battery ---------------------------------------------------------------
-$batt = [ordered]@{ present = [bool](Get-CimInstance Win32_Battery) }
-if ($batt.present) {
+# Uses Windows' own battery report (powercfg), which works on almost every laptop
+# without admin rights. Falls back to WMI if that isn't available.
+$batt = [ordered]@{ present = [bool](Get-CimInstance Win32_Battery); source = '' }
+$design = $null; $full = $null; $cycles = $null
+$xmlPath = Join-Path $env:TEMP 'pts-battery-report.xml'
+Remove-Item $xmlPath -ErrorAction SilentlyContinue
+powercfg /batteryreport /xml /output "$xmlPath" | Out-Null
+if (Test-Path $xmlPath) {
+  [xml]$bx = Get-Content $xmlPath -Raw
+  $b0 = @($bx.BatteryReport.Batteries.Battery)[0]
+  if ($b0) {
+    $batt.present = $true
+    $batt.source = 'powercfg'
+    $design = [double]$b0.DesignCapacity
+    $full = [double]$b0.FullChargeCapacity
+    $cycles = [int]$b0.CycleCount
+    $batt.name = "$($b0.Manufacturer) $($b0.Id)".Trim()
+  }
+}
+if ($batt.present -and -not ($design -and $full)) {
+  $batt.source = 'wmi'
   $design = (Get-CimInstance -Namespace root/wmi -ClassName BatteryStaticData | Select-Object -First 1).DesignedCapacity
   $full = (Get-CimInstance -Namespace root/wmi -ClassName BatteryFullChargedCapacity | Select-Object -First 1).FullChargedCapacity
   $cycles = (Get-CimInstance -Namespace root/wmi -ClassName BatteryCycleCount | Select-Object -First 1).CycleCount
+}
+if ($batt.present) {
+  if ($design -and $full) {
+    $batt.designmWh = $design
+    $batt.fullmWh = $full
+    $batt.healthPct = [math]::Min(100, [math]::Round(($full / $design) * 100))
+  }
+  if ($cycles) { $batt.cycles = $cycles }
   $status = Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus | Select-Object -First 1
-  if ($design -and $full) { $batt.healthPct = [math]::Round(($full / $design) * 100) }
-  $batt.cycles = $cycles
   $batt.charging = [bool]$status.Charging
   $batt.pluggedIn = [bool]$status.PowerOnline
+  $batt.chargePct = [int](Get-CimInstance Win32_Battery | Select-Object -First 1).EstimatedChargeRemaining
 }
 $r.battery = $batt
 

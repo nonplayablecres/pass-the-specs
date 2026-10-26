@@ -166,6 +166,21 @@ ipcMain.handle('pts:save-report', async (_e, { name, text }) => {
   }
 });
 
+// Saves Windows' own battery report (an HTML page) into the reports folder on the stick
+ipcMain.handle('pts:battery-report', async (_e, name) => {
+  if (process.platform !== 'win32') return { ok: false, error: 'Windows only' };
+  try {
+    const dir = path.join(dataFolder(), 'reports');
+    fs.mkdirSync(dir, { recursive: true });
+    const safe = String(name || 'device').replace(/[^a-z0-9_.-]+/gi, '_').slice(0, 80);
+    const file = path.join(dir, safe + '_battery.html');
+    await run('powercfg.exe', ['/batteryreport', '/output', file], 30000);
+    return fs.existsSync(file) ? { ok: true, file } : { ok: false, error: 'Report not created' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 // Opens the built-in "reset this computer" screen. The user still confirms inside Windows / macOS.
 ipcMain.handle('pts:factory-reset', async () => {
   try {

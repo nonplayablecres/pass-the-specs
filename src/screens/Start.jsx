@@ -1,5 +1,6 @@
 import { DEVICE_TYPES, checksFor } from '../data/checklists.js';
 import { parseListing } from '../lib/autoChecks.js';
+import Battery from '../components/Battery.jsx';
 
 export default function Start({ scan, detectedType, title, specDiff, device, setDevice, listing, setListing, boxId, setBoxId, counts, onStart }) {
   const parsed = parseListing(listing);
@@ -28,6 +29,7 @@ export default function Start({ scan, detectedType, title, specDiff, device, set
                 </>
               )}
             </div>
+            {info && <Battery battery={info.battery} />}
             {info && <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--green-text)' }}>{scan.mock ? 'EXAMPLE DATA' : 'DETECTED'}</span>}
           </div>
         )}

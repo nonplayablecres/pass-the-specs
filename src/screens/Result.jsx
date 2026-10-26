@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import { formatTime } from '../components/Header.jsx';
 import { bridge } from '../lib/bridge.js';
+import Battery from '../components/Battery.jsx';
 
 function Barcode({ value }) {
   const ref = useRef(null);
@@ -52,9 +53,16 @@ function ListingPanel({ lookup, title, boxId, setBoxId, chosen }) {
 }
 
 // rows: every check with { id, title, status, detail, note, auto }
-export default function Result({ rows, deviceName, listingName, specDiff, title, boxId, setBoxId, lookup, elapsed, version, onBack, onNew, onReset, resetAt, reportName, onReportText, copy }) {
+export default function Result({ battery, rows, deviceName, listingName, specDiff, title, boxId, setBoxId, lookup, elapsed, version, onBack, onNew, onReset, resetAt, reportName, onReportText, copy }) {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(null);
+  const [battReport, setBattReport] = useState(null);
+
+  // Save Windows' full battery report next to the test report (once per test)
+  useEffect(() => {
+    if (!bridge.inShell || !battery || !battery.present) return;
+    bridge.batteryReport(reportName).then((res) => { if (res && res.ok) setBattReport(res.file); });
+  }, [battery, reportName]);
   const fails = rows.filter((r) => r.status === 'fail');
   const passes = rows.filter((r) => r.status === 'pass');
   const nas = rows.filter((r) => r.status === 'na');
@@ -112,6 +120,7 @@ export default function Result({ rows, deviceName, listingName, specDiff, title,
 
       <main className="result">
         <section className="result-main">
+          <Battery battery={battery} size="big" reportFile={battReport} />
           {specDiff && (
             <div className="warn" role="status">
               <b>DIFFERENT LISTING · NOT A FAULT</b>

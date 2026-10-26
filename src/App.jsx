@@ -142,6 +142,7 @@ export default function App() {
       )}
       {screen === 'result' && (
         <Result
+          battery={isComputer && scan.info ? scan.info.battery : null}
           rows={rows}
           deviceName={deviceLabel}
           listingName={expected ? expected.title : ''}

@@ -108,6 +108,10 @@ export const bridge = {
     const hits = /custom/i.test(query) ? custom : /none/.test(q) ? [] : /near/.test(q) ? dell.filter((d) => !d.boxName.includes('/8GB')) : dell;
     return { ok: true, hits, mock: true };
   },
+  async batteryReport(name) {
+    if (hasShell && window.pts.batteryReport) return window.pts.batteryReport(name);
+    return { ok: false };
+  },
   async saveReport(name, text) {
     if (hasShell) return window.pts.saveReport(name, text);
     return { ok: false, error: 'Saving only works in the app' };

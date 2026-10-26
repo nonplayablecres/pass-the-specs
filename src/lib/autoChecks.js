@@ -9,7 +9,9 @@ export const SETTINGS = {
   mobicodeUrl: '',
   stressSeconds: 60, // how long the stress test runs
   stressThrottleFail: 0.6, // fail if it drops below 60% of its starting speed (overheating)
-  batteryFailBelow: 50, // % of original capacity
+  // Battery health (% of the capacity it had when new)
+  batteryGreen: 80, // 80% and above = green
+  batteryAmber: 60, // 60-79% = amber (passes, worth noting). Below 60% = red (fails)
   storageTolerance: 0.08 // 8% either way when comparing drive size to the listing
 };
 
@@ -134,6 +136,16 @@ export function cexTitle(info, deviceType) {
   ].filter(Boolean).join('/');
 }
 
+// Green / amber / red battery rating
+export function batteryGrade(battery) {
+  const b = battery || {};
+  if (!b.present || !b.healthPct) return null;
+  const pct = b.healthPct;
+  const tone = pct >= SETTINGS.batteryGreen ? 'green' : pct >= SETTINGS.batteryAmber ? 'amber' : 'red';
+  const label = tone === 'green' ? 'good' : tone === 'amber' ? 'worn' : 'poor';
+  return { pct, tone, label, cycles: b.cycles || null };
+}
+
 export function describeSpec(info) {
   if (!info) return '';
   const d = mainDisk(info);
@@ -196,7 +208,14 @@ export function evaluate(deviceType, info, expected) {
   // Encryption
   const enc = info.encryption || {};
   if (enc.state === 'off') r.m9 = { status: 'pass', detail: isMac ? 'FileVault is off' : 'Drive is not encrypted' };
-  else if (enc.state === 'on') r.m9 = { status: 'fail', detail: (isMac ? 'FileVault is ON. ' : (enc.detail || 'BitLocker is ON') + '. ') + 'Turn it off, then Re-scan.' };
+  else if (enc.state === 'on') {
+    r.m9 = {
+      status: 'fail',
+      detail: isMac
+        ? 'FileVault is on: the drive is locked to the previous owner’s account. Turn it off in System Settings → Privacy & Security → FileVault, then Re-scan.'
+        : `The drive is encrypted (${enc.detail || 'BitLocker on'}), locked to the previous owner’s Microsoft account. If it’s left on, the laptop can ask for a recovery key after a reset. Turn it off: Settings → Privacy & security → Device encryption (or search “Manage BitLocker”), then Re-scan.`
+    };
+  }
   else if (enc.state === 'waiting') r.m9 = { status: null, detail: 'Device encryption is ready but not active. Turn it off in Settings to be safe.' };
 
   // Remote management
@@ -248,9 +267,10 @@ export function evaluate(deviceType, info, expected) {
   // Battery
   const b = info.battery || {};
   if (!isDesktop) {
-    if (b.present && b.healthPct) {
-      const d = `${b.healthPct}% of original capacity${b.cycles ? ' · ' + b.cycles + ' cycles' : ''}`;
-      r.m24 = b.healthPct < SETTINGS.batteryFailBelow ? { status: 'fail', detail: d } : { status: 'pass', detail: d };
+    const g = batteryGrade(b);
+    if (g) {
+      const d = `${g.pct}% health (${g.label})${b.cycles ? ' · ' + b.cycles + ' charge cycles' : ''}`;
+      r.m24 = g.tone === 'red' ? { status: 'fail', detail: d } : { status: 'pass', detail: d };
     } else if (b.present === false && deviceType === 'laptop') {
       r.m24 = { status: 'fail', detail: 'No battery detected' };
     }
