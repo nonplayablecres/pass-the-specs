@@ -1,0 +1,91 @@
+import { DEVICE_TYPES, checksFor } from '../data/checklists.js';
+import { parseListing } from '../lib/autoChecks.js';
+
+export default function Start({ scan, detectedType, title, specDiff, device, setDevice, listing, setListing, boxId, setBoxId, counts, onStart }) {
+  const parsed = parseListing(listing);
+  const info = scan.info;
+  const current = DEVICE_TYPES.find((d) => d.id === device);
+  const isComputer = current && current.list === 'computer';
+
+  return (
+    <main className="start">
+      <div className="start-inner">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <span className="eyebrow">Ready</span>
+          <h1 className="title-xl">New test</h1>
+        </div>
+
+        {isComputer && (
+          <div className="detected" aria-live="polite">
+            <span className={'dot' + (scan.loading ? ' wait' : scan.error ? ' bad' : '')} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {scan.loading && <span style={{ fontSize: 17, fontWeight: 700 }}>Scanning this machine…</span>}
+              {scan.error && <><span style={{ fontSize: 17, fontWeight: 700 }}>Couldn’t scan this machine</span><span className="muted" style={{ fontSize: 14 }}>{scan.error}. Every check will be manual.</span></>}
+              {info && (
+                <>
+                  <span style={{ fontSize: 17, fontWeight: 700, userSelect: 'text' }}>{title || 'This machine'}</span>
+                  <span className="muted" style={{ fontSize: 14 }}>CeX format, built from what’s inside{info.serial ? ' · Serial ' + info.serial : ''}</span>
+                </>
+              )}
+            </div>
+            {info && <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--green-text)' }}>{scan.mock ? 'EXAMPLE DATA' : 'DETECTED'}</span>}
+          </div>
+        )}
+
+        <div className="types" role="group" aria-label="Device type">
+          {DEVICE_TYPES.map((t) => (
+            <button key={t.id} type="button" className="type" aria-pressed={device === t.id}
+              disabled={!t.ready || (t.list === 'computer' && detectedType && t.id !== detectedType)}
+              title={t.list === 'computer' && detectedType && t.id !== detectedType ? `This machine is a ${detectedType}` : undefined}
+              onClick={() => setDevice(t.id)}>
+              {!t.ready && <span className="soon">SOON</span>}
+              {t.id === detectedType && <span className="soon" style={{ color: device === t.id ? 'var(--green)' : 'var(--green-text)' }}>DETECTED</span>}
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" aria-hidden="true"><path d={t.icon} /></svg>
+              <span>{t.name}</span>
+            </button>
+          ))}
+        </div>
+
+        {isComputer && (
+          <div>
+            <label className="field">Listing it’s being bought as (optional)
+              <input value={listing} onChange={(e) => setListing(e.target.value)} placeholder="e.g. Dell Latitude 5420/i5-1145G7/16GB Ram/256GB SSD/B" />
+              {parsed && (
+                <span className="parsed">
+                  {parsed.unreadable ? <span className="tag">Couldn’t read a spec from that</span> : (
+                    <>
+                      {parsed.cpu && <span className="tag">{parsed.cpu}</span>}
+                      {parsed.ramGB && <span className="tag">{parsed.ramGB}GB RAM</span>}
+                      {parsed.storageGB && <span className="tag">{parsed.storageGB >= 1000 ? parsed.storageGB / 1000 + 'TB' : parsed.storageGB + 'GB'} {parsed.storageType}</span>}
+                      {parsed.gpu && <span className="tag">{parsed.gpu}</span>}
+                      {parsed.grade && <span className="tag">Grade {parsed.grade}</span>}
+                    </>
+                  )}
+                </span>
+              )}
+            </label>
+          </div>
+        )}
+
+        {isComputer && specDiff && (
+          <div className="warn" role="status">
+            <b>DIFFERENT LISTING</b>
+            <span>This machine doesn’t match that listing: {specDiff.differences.join(' · ')}.</span>
+            <span>It’s actually <b style={{ userSelect: 'text' }}>{specDiff.actual}</b>. Not a fault, just pick the right listing.</span>
+          </div>
+        )}
+
+        <button type="button" className="btn primary big" onClick={onStart} disabled={!current || !current.ready || (isComputer && scan.loading)}>
+          <span>START {current ? current.name.toUpperCase() : ''} TEST</span>
+          <span className="pixel" style={{ fontSize: 14 }}>▶</span>
+        </button>
+
+        <span className="muted" style={{ fontSize: 14 }}>
+          {checksFor(device).length ? `${counts.manual} quick checks` : ''}
+          {counts.auto ? ` · ${counts.auto} done automatically` : ''}
+          {counts.na ? ` · ${counts.na} skipped (not on this device)` : ''}
+        </span>
+      </div>
+    </main>
+  );
+}

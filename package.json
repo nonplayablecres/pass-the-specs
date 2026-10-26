@@ -1,0 +1,62 @@
+{
+  "name": "pass-the-specs",
+  "productName": "Pass the Specs",
+  "version": "0.1.0",
+  "description": "Fast, guided device testing for the shop floor.",
+  "author": "Pass the Specs",
+  "private": true,
+  "main": "electron/main.js",
+  "pts": {
+    "githubRepo": "nonplayablecres/pass-the-specs",
+    "minShell": "0.1.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n ui,app -c red,gray \"vite\" \"wait-on tcp:5173 && cross-env PTS_DEV=1 electron .\"",
+    "dev:web": "vite",
+    "build:ui": "vite build && node scripts/zip-ui.js",
+    "start": "npm run build:ui && electron .",
+    "dist": "npm run build:ui && electron-builder --win portable --publish never",
+    "dist:folder": "npm run build:ui && electron-builder --win dir --publish never",
+    "dist:mac": "npm run build:ui && electron-builder --mac zip --publish never"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16"
+  },
+  "devDependencies": {
+    "@fontsource/archivo": "^5.0.0",
+    "@fontsource/press-start-2p": "^5.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.0.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "jsbarcode": "^3.11.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.0",
+    "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.passthespecs.app",
+    "productName": "Pass the Specs",
+    "files": [
+      "electron/**",
+      "dist/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "portable",
+      "requestedExecutionLevel": "highestAvailable"
+    },
+    "portable": {
+      "artifactName": "PassTheSpecs.exe"
+    },
+    "mac": {
+      "target": "zip",
+      "category": "public.app-category.utilities"
+    }
+  }
+}
