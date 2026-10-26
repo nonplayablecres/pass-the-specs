@@ -33,15 +33,32 @@ jobs:
 
   build-mac:
     runs-on: macos-latest
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false' # not code-signed (needs a paid Apple developer account)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: npm install
-      - run: npm run dist:mac
+      # Signs and notarises with Apple when the secrets are set up (see README),
+      # otherwise makes the same self-signed build as before.
+      - name: Build Mac app
+        env:
+          MAC_CERT: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          npm run build:ui
+          if [ -n "$MAC_CERT" ]; then
+            echo "Signing and notarising with Apple"
+            CSC_LINK="$MAC_CERT" CSC_KEY_PASSWORD="$MAC_CERT_PASSWORD" npx electron-builder --mac zip --x64 --arm64 --publish never \
+              -c.mac.hardenedRuntime=true -c.mac.notarize=true \
+              -c.mac.entitlements=build/entitlements.mac.plist -c.mac.entitlementsInherit=build/entitlements.mac.plist
+          else
+            echo "No Apple certificate set up: self-signed build"
+            CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac zip --x64 --arm64 --publish never -c.mac.identity=-
+          fi
       - uses: softprops/action-gh-release@v2
         with:
           files: release/PassTheSpecs-mac-*.zip

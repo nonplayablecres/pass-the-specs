@@ -196,6 +196,31 @@ RAM and CPU.
 - **Before using it at work, check with your manager / IT** that running it
   from a USB stick is OK.
 
+## Mac signing (plug-and-play on any Mac)
+
+Without this, a downloaded Mac app needs the "Open Anyway" step once. With it,
+it opens with a double-click everywhere. The build signs automatically as soon
+as these five secrets exist.
+
+1. Join the Apple Developer Program (developer.apple.com/programs, individual is fine).
+2. On your Mac: Keychain Access → Certificate Assistant → Request a Certificate
+   From a Certificate Authority → your email → Saved to disk.
+3. developer.apple.com → Certificates → + → **Developer ID Application** →
+   upload that request → download the certificate → double-click it.
+4. Keychain Access → My Certificates → right-click "Developer ID Application: …"
+   → Export → save as `cert.p12` with a password.
+5. Terminal: `base64 -i cert.p12 | pbcopy` (copies it).
+6. appleid.apple.com → Sign-In and Security → App-Specific Passwords → make one.
+7. Your Team ID: developer.apple.com → Account → Membership details.
+8. GitHub repo → Settings → Secrets and variables → Actions → New repository
+   secret, five times:
+   - `MAC_CERT_P12_BASE64`: paste from step 5
+   - `MAC_CERT_PASSWORD`: the password from step 4
+   - `APPLE_ID`: your Apple ID email
+   - `APPLE_APP_SPECIFIC_PASSWORD`: from step 6
+   - `APPLE_TEAM_ID`: from step 7
+9. Release as normal. The Mac build log says "Signing and notarising with Apple".
+
 ## Getting changes from Claude
 
 **Best: through GitHub.** Once the project is on GitHub (step 6), tell Claude

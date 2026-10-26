@@ -58,7 +58,10 @@
       "target": "zip",
       "category": "public.app-category.utilities",
       "artifactName": "PassTheSpecs-mac-${arch}.${ext}",
-      "identity": "-"
+      "extendInfo": {
+        "NSCameraUsageDescription": "Pass the Specs uses the camera to test it works.",
+        "NSMicrophoneUsageDescription": "Pass the Specs uses the microphone to test it works."
+      }
     }
   }
 }
