@@ -363,3 +363,4 @@ button.badge.on { background: var(--red); }
 .sector-key .sc { width: 14px; aspect-ratio: auto; height: 9px; }
 .drive-details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .drive-details pre { white-space: pre-wrap; font-size: 12px; background: var(--bg); border: 1px solid var(--line); padding: 10px; margin: 8px 0; user-select: text; }
+.sc.w { background: var(--muted); }

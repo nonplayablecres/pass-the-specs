@@ -8,7 +8,7 @@
 //   tool    - optional built-in test: photo | keys | keysFull | screen | speaker | mic | camera | touch | trackpad | pad | stress
 //             | ports | card | mobicode | fingerprint | monitor | media | mouse | drive
 //   pages   - monitor tool: which full-screen tests to show
-//   step    - drive tool: health | scan | speed
+//   step    - drive tool: health | scan | speed | capacity
 //   final   - done on the last screen (factory reset), not in the click-through
 //
 // Example photos: put a picture at public/examples/<id>.jpg (e.g. public/examples/v1.jpg)
@@ -117,7 +117,8 @@ export const MOUSE_CHECKS = [
 export const DRIVE_CHECKS = [
   { id: 'd1', section: M, title: 'Drive health', how: 'Pick the drive. Reads its own health report: bad sectors, wear, hours and temperature.', tool: 'drive', step: 'health' },
   { id: 'd2', section: M, title: 'Bad sector scan', how: 'Reads the drive to find unreadable or slow areas. Read-only: nothing on the drive is changed.', tool: 'drive', step: 'scan' },
-  { id: 'd3', section: M, title: 'Speed test', how: 'Read and write speed compared with what this drive should do.', tool: 'drive', step: 'speed' }
+  { id: 'd3', section: M, title: 'Speed test', how: 'Read and write speed compared with what this drive should do.', tool: 'drive', step: 'speed' },
+  { id: 'd4', section: M, title: 'Fake capacity check', how: 'SD cards and USB sticks: checks every gigabyte it claims to have is real. Skipped for hard drives and SSDs.', tool: 'drive', step: 'capacity' }
 ];
 
 const LISTS = {

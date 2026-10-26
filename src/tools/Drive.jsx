@@ -1,15 +1,15 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { bridge } from '../lib/bridge.js';
-import { driveModel, expectedSpeed, judgeHealth, judgeSpeed, sizeLabel } from '../lib/driveRules.js';
+import { KIND_NAME, driveKind, driveModel, expectedSpeed, isFlash, judgeHealth, judgeSpeed, sizeLabel } from '../lib/driveRules.js';
 
-// One drive test shared by the three drive checks (health, bad sectors, speed),
+// One drive test shared by the drive checks (health, bad sectors, speed, capacity),
 // so the drive is picked once and every result stays when moving between checks.
-let state = { loading: false, error: '', drives: null, picked: null, scan: null, speed: null, running: '', progress: null };
+let state = { loading: false, error: '', drives: null, picked: null, scan: null, speed: null, cap: null, running: '', progress: null };
 const subs = new Set();
 let autoModel = '';
 const setState = (patch) => { state = { ...state, ...patch }; subs.forEach((f) => f()); };
 const useDriveState = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => state);
-export function resetDriveTest() { autoModel = ''; state = { loading: false, error: '', drives: null, picked: null, scan: null, speed: null, running: '', progress: null }; }
+export function resetDriveTest() { autoModel = ''; state = { loading: false, error: '', drives: null, picked: null, scan: null, speed: null, cap: null, running: '', progress: null }; }
 
 async function loadDrives() {
   setState({ loading: true, error: '' });
@@ -35,7 +35,7 @@ function Picker({ drives, picked, onPick }) {
         {others.map((d) => (
           <button key={d.number} type="button" className={'drive-row' + (picked === d.number ? ' on' : '')} onClick={() => onPick(d)}>
             <b>{d.model}</b>
-            <span>{sizeLabel(d.sizeBytes)} · {expectedSpeed(d).type}{d.bus ? ' · ' + d.bus : ''}{d.volumes && d.volumes.length ? ' · ' + d.volumes.map((v) => (/^[A-Z]$/i.test(v.letter) ? v.letter + ':' : v.label || v.letter)).join(' ') : ' · no partition'}</span>
+            <span>{sizeLabel(d.sizeBytes)} · {KIND_NAME[driveKind(d)]}{d.bus ? ' · ' + d.bus : ''}{d.volumes && d.volumes.length ? ' · ' + d.volumes.map((v) => (/^[A-Z]$/i.test(v.letter) ? v.letter + ':' : v.label || v.letter)).join(' ') : ' · no partition'}</span>
           </button>
         ))}
       </div>
@@ -49,8 +49,10 @@ function Picker({ drives, picked, onPick }) {
 
 function Health({ d, report }) {
   const h = judgeHealth(d);
+  const flash = isFlash(d);
   useEffect(() => {
     if (h.status === 'pass' || h.status === 'fail') report(h.status, h.status === 'pass' ? ['Healthy', ...h.info].join(' · ') : h.bad.join(' · '));
+    else if (flash) report('na', 'SD cards and USB sticks don’t have a health report');
   }, [d.number]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className={'drive-panel ' + h.status}>
@@ -58,7 +60,7 @@ function Health({ d, report }) {
       {h.bad.map((x) => <span key={x} className="bad">✕ {x}</span>)}
       {h.warn.map((x) => <span key={x} className="meh">! {x}</span>)}
       {h.info.map((x) => <span key={x}>{x}</span>)}
-      {h.status === 'unknown' && <span>This drive (or its USB adapter) doesn’t share a health report. Run the bad sector scan instead.</span>}
+      {h.status === 'unknown' && <span>{flash ? `${KIND_NAME[driveKind(d)]}s don’t have a health report. The bad sector scan, speed test and fake capacity check cover it.` : 'This drive (or its USB adapter) doesn’t share a health report. Run the bad sector scan instead.'}</span>}
       {d.serial && <span className="muted">Serial {d.serial}</span>}
     </div>
   );
@@ -79,14 +81,15 @@ function Details({ text }) {
 
 // The whole drive as a grid of squares, start (top left) to end (bottom right):
 // grey = not read yet, green = reads fine, amber = slow (weak), red = unreadable
-function SectorMap({ map }) {
+const SCAN_KEY = [['g', 'Good'], ['s', 'Slow'], ['b', 'Bad'], ['.', 'Not read']];
+function SectorMap({ map, legend = SCAN_KEY }) {
   return (
     <div className="sector-wrap">
       <div className="sector-map" role="img" aria-label={`Sector map: ${(map.match(/b/g) || []).length} bad areas, ${(map.match(/s/g) || []).length} slow areas`}>
         {map.split('').map((c, i) => <i key={i} className={'sc ' + c} />)}
       </div>
       <div className="sector-key">
-        <span><i className="sc g" /> Good</span><span><i className="sc s" /> Slow</span><span><i className="sc b" /> Bad</span><span><i className="sc ." /> Not read</span>
+        {legend.map(([c, name]) => <span key={c}><i className={'sc ' + c} /> {name}</span>)}
         <span className="muted">Start of drive top left → end bottom right</span>
       </div>
     </div>
@@ -108,13 +111,15 @@ function Scan({ d, report }) {
       report(bad || weak ? 'fail' : 'pass', bad ? `${Math.round(out.badBytes / 1024)} KB unreadable (${mode} scan)` : weak ? `${out.slow} weak / slow areas (${mode} scan)` : `No bad sectors (${mode} scan)`);
     }
   };
+  // Starts the quick scan by itself the first time this drive reaches this check
+  useEffect(() => { if (!res && !state.running) run('quick'); }, [d.number]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="tool-row">
-        <button type="button" className="btn primary" disabled={busy} onClick={() => run('quick')}>▶ QUICK SCAN</button>
+        <button type="button" className="btn primary" disabled={busy} onClick={() => run('quick')}>{res ? '↻ QUICK SCAN' : '▶ QUICK SCAN'}</button>
         <button type="button" className="btn" disabled={busy} onClick={() => run('full')}>▶ FULL SCAN</button>
         {busy && <button type="button" className="btn" onClick={() => bridge.driveStop()}>■ Stop</button>}
-        <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>Quick: under a minute, checks spots across the whole drive. Full: reads every sector{d.sizeBytes ? `, roughly ${dur(d.sizeBytes / 1e6 / (expectedSpeed(d).hdd ? 140 : 1500))}` : ''}.</span>
+        <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>Quick: under a minute, checks spots across the whole drive. Full: reads every sector{d.sizeBytes ? `, roughly ${dur(d.sizeBytes / 1e6 / (expectedSpeed(d).hdd ? 140 : expectedSpeed(d).flash ? 60 : 1500))}` : ''}.</span>
       </div>
       {busy && !p && <div className="hint"><span className="dot wait" style={{ display: 'inline-block' }} /> Opening the drive…</div>}
       {(p || res) && (() => {
@@ -149,36 +154,38 @@ function Speed({ d, report }) {
   const e = expectedSpeed(d);
   const run = async () => {
     setState({ running: 'speed', progress: null, speed: null });
-    const out = await bridge.driveSpeed({ number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes });
+    const out = await bridge.driveSpeed({ number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes, flash: e.flash });
     setState({ running: '', progress: null, speed: { ...out, number: d.number } });
     if (out.ok) {
       const j = judgeSpeed(d, out);
-      if (j.status !== 'unknown') report(j.status, `Read ${mbs(out.read)} · Write ${mbs(out.write)} (expected about ${mbs(j.wantRead)} / ${mbs(j.wantWrite)})`);
+      if (j.status !== 'unknown') report(j.status, `Read ${mbs(out.read)} · Write ${mbs(out.write)}${j.level ? ` (${j.level})` : ` (expected about ${mbs(j.wantRead)} / ${mbs(j.wantWrite)})`}`);
     }
   };
+  useEffect(() => { if (!res && !state.running) run(); }, [d.number]); // eslint-disable-line react-hooks/exhaustive-deps
   const j = res && res.ok ? judgeSpeed(d, res) : null;
   const row = (name, val, want, ok) => (
     <div className="speed-row">
       <span>{name}</span>
       <div className="bar big"><div className={ok === false ? 'bad' : ''} style={{ width: `${Math.min(100, ((val || 0) / (want * 1.2)) * 100)}%` }} /><i style={{ left: `${(1 / 1.2) * 100}%` }} title="Expected" /></div>
       <b>{mbs(val)}</b>
-      <span className="muted">expected ~{mbs(want)}</span>
+      <span className="muted">{e.minimum ? 'minimum ' : 'expected ~'}{mbs(want)}</span>
     </div>
   );
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="tool-row">
-        <button type="button" className="btn primary" disabled={busy} onClick={run}>{busy ? (s.progress && s.progress.phase === 'write' ? 'Testing write…' : 'Testing read…') : '▶ RUN SPEED TEST'}</button>
+        <button type="button" className="btn primary" disabled={busy} onClick={run}>{busy ? (s.progress && s.progress.phase === 'write' ? 'Testing write…' : 'Testing read…') : res ? '↻ RUN AGAIN' : '▶ RUN SPEED TEST'}</button>
         <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>
-          {e.kind}{e.rated ? ' (rated speeds)' : ' (typical for this type)'}. Takes about 10 seconds. The write test uses a temporary file and deletes it.
+          {e.kind}{e.minimum ? ' (minimum speeds)' : e.rated ? ' (rated speeds)' : ' (typical for this type)'}. Takes about 10 seconds. The write test uses a temporary file and deletes it.
         </span>
       </div>
-      {e.usb && <div className="warn">Connected by USB, so the adapter limits the speed. Fit it inside a PC to see its real speed.</div>}
+      {e.usb && !e.flash && <div className="warn">Connected by USB, so the adapter limits the speed. Fit it inside a PC to see its real speed.</div>}
       {res && !res.ok && <div className="warn">{res.error}</div>}
       {j && (
         <div className={'drive-panel ' + j.status}>
           {row('READ', res.read, j.wantRead, j.readOk)}
           {row('WRITE', res.write, j.wantWrite, j.writeOk)}
+          {j.level && <span><b>Speed class:</b> {j.level} (from the measured write speed)</span>}
           {res.notes.map((n) => <span key={n} className="muted">{n}</span>)}
           <Details text={res.details} />
         </div>
@@ -187,7 +194,64 @@ function Speed({ d, report }) {
   );
 }
 
-// The scan / speed test changed in app 0.1.17; older app copies can't run them
+// Fake capacity check: fills the free space with test data and reads it all back
+function Capacity({ d, report }) {
+  const s = useDriveState();
+  const flash = isFlash(d);
+  const res = s.cap && s.cap.number === d.number ? s.cap : null;
+  const busy = s.running === 'cap';
+  const p = busy ? s.progress : null;
+  const vol = (d.volumes || []).slice().sort((a, b) => (b.free || 0) - (a.free || 0))[0];
+  // Not a card or stick: nothing to do here
+  useEffect(() => { if (!flash) report('na', 'Only needed for SD cards and USB sticks', { advance: true }); }, [d.number]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!flash) return <div className="hint">Only needed for SD cards and USB sticks. Skipped.</div>;
+
+  const sp = s.speed && s.speed.number === d.number ? s.speed : null;
+  const est = vol ? vol.free / 1e6 / Math.max(5, (sp && sp.write) || 15) + vol.free / 1e6 / Math.max(10, (sp && sp.read) || 40) : null;
+  const run = async () => {
+    setState({ running: 'cap', progress: null, cap: null });
+    const out = await bridge.driveCapacity({ volumes: d.volumes });
+    setState({ running: '', progress: null, cap: { ...out, number: d.number } });
+    if (out.ok && !out.stopped) {
+      const fake = out.badBytes > 0 || !!out.note;
+      report(fake ? 'fail' : 'pass', fake ? `Fake capacity: only about ${(out.realBytes / 1e9).toFixed(1)} GB really works` : `All ${(out.written / 1e9).toFixed(1)} GB of free space checked and real`);
+    }
+  };
+  const r = p || res;
+  const pct = r && r.total ? Math.min(100, (r.done / r.total) * 100) : 0;
+  const fake = r && !busy && (r.badBytes > 0 || r.note);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="tool-row">
+        <button type="button" className="btn primary" disabled={busy || !vol} onClick={run}>{res ? '↻ CHECK AGAIN' : '▶ START CHECK'}</button>
+        {busy && <button type="button" className="btn" onClick={() => bridge.driveStop()}>■ Stop</button>}
+        <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>
+          {vol ? `Fills the ${sizeLabel(vol.free)} of free space with test data, reads it all back, then deletes it. Files already on it aren’t touched.${est ? ` About ${dur(est)}.` : ''}` : 'Needs a formatted partition. Format the card, then press Refresh.'}
+        </span>
+      </div>
+      {r && (
+        <div className={'drive-panel ' + (busy ? '' : r.error ? 'fail' : fake ? 'fail' : r.stopped ? '' : 'pass')}>
+          {r.error ? <span className="bad">{r.error}</span> : (
+            <>
+              {r.map && <SectorMap map={r.map} legend={[['w', 'Written'], ['g', 'Checked: real'], ['b', 'Checked: fake / lost'], ['.', 'Not yet']]} />}
+              <div className="bar big"><div style={{ width: `${pct}%` }} /></div>
+              <span>
+                <b className="pixel" style={{ fontSize: 11 }}>{Math.floor(pct)}%</b>
+                {' · '}{r.phase === 'write' ? 'Writing' : 'Checking'} · {mbs(r.speed)}{busy && r.eta != null ? ` · ${dur(r.eta)} left` : ''}{!busy && r.stopped ? ' · stopped' : ''}
+              </span>
+              {!busy && !r.stopped && (fake
+                ? <span className="bad">✕ FAKE CAPACITY: only about {(r.realBytes / 1e9).toFixed(1)} GB really works{r.note ? `. ${r.note}` : ''}</span>
+                : <span>✓ All {(r.written / 1e9).toFixed(1)} GB checked: real capacity</span>)}
+              {!busy && r.cached && <span className="muted">Windows may have kept some test data in memory, so small fakes could slip through.</span>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The scan / speed test changed in app 0.1.18; older app copies can't run them
 const older = (v, than) => {
   const a = String(v || '0').split('.').map(Number);
   const b = than.split('.').map(Number);
@@ -212,20 +276,24 @@ export default function Drive({ step, report, model, setModel }) {
   if (!s.drives) return <div className="hint"><span className="dot wait" style={{ display: 'inline-block' }} /> Looking for drives…</div>;
 
   const d = s.drives.find((x) => x.number === s.picked);
+  const candidates = s.drives.filter((x) => !x.boot);
   const pick = (drive) => {
     setState({ picked: drive.number });
     // Fill in the model for the CeX listing, unless the tester typed their own
     if (setModel && (!String(model || '').trim() || model === autoModel)) { autoModel = driveModel(drive); setModel(autoModel); }
   };
+  // Only one drive plugged in: pick it straight away
+  if (!d && candidates.length === 1) setTimeout(() => { if (state.picked == null) pick(candidates[0]); }, 0);
   return (
     <div className="tool" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Picker drives={s.drives} picked={s.picked} onPick={pick} />
       {d && step === 'health' && <Health d={d} report={report} />}
-      {d && step !== 'health' && shell && older(shell, '0.1.17') && <div className="warn">This test needs the newest app (v0.1.17 or later). Download it once from the latest release, then it keeps itself up to date.</div>}
-      {d && step === 'scan' && !(shell && older(shell, '0.1.17')) && (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
+      {d && step !== 'health' && shell && older(shell, '0.1.18') && <div className="warn">This test needs the newest app (v0.1.18 or later). Download it once from the latest release, then it keeps itself up to date.</div>}
+      {d && step === 'scan' && !(shell && older(shell, '0.1.18')) && (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
         ? <div className="hint">macOS doesn’t let apps read every sector, so the bad sector scan needs a Windows PC. On a Mac, rely on the health check and speed test.</div>
         : <Scan d={d} report={report} />)}
-      {d && step === 'speed' && !(shell && older(shell, '0.1.17')) && <Speed d={d} report={report} />}
+      {d && step === 'speed' && !(shell && older(shell, '0.1.18')) && <Speed d={d} report={report} />}
+      {d && step === 'capacity' && !(shell && older(shell, '0.1.18')) && <Capacity d={d} report={report} />}
       {!d && s.drives.some((x) => !x.boot) && <span className="muted">Pick the drive above.</span>}
     </div>
   );

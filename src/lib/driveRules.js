@@ -42,23 +42,55 @@ export const sizeLabel = (bytes) => {
   return `${sizes.reduce((b, v) => (Math.abs(v - gb) < Math.abs(b - gb) ? v : b), sizes[0])}GB`;
 };
 
-// What kind of drive this is and how fast it should be
+// What kind of drive it is, worked out from what Windows / macOS reports:
+// 'sd' (SD / microSD card, in a slot or a USB reader), 'usb' (USB stick), 'hdd', 'nvme', 'ssd'
+const CARD = /\b(sd|sdxc|sdhc|micro ?sd|mmc|card|reader|multi-?card)\b|sd\/mmc|secure digital/i;
+const STICK = /flash|usb ?disk|cruzer|datatraveler|jumpdrive|thumb|pen ?drive|stick|ultra fit|glide|dual drive|blade|usb ?drive|mass storage/i;
+export function driveKind(d) {
+  const bus = String(d.bus || '');
+  const model = String(d.model || '');
+  if (/^(sd|mmc)$/i.test(bus) || /secure digital/i.test(bus)) return 'sd';
+  const usb = /usb/i.test(bus);
+  if (usb && CARD.test(model)) return 'sd';
+  if (usb && STICK.test(model)) return 'usb';
+  if (/hdd/i.test(d.media || '') || (d.spindle && d.spindle > 1)) return 'hdd';
+  if (/nvme|pci/i.test(bus)) return 'nvme';
+  // A USB device that isn't reported as an SSD or hard drive is a stick / card
+  if (usb && !/ssd|hdd/i.test(d.media || '')) return 'usb';
+  return 'ssd';
+}
+export const KIND_NAME = { sd: 'SD card', usb: 'USB stick', hdd: 'Hard drive', nvme: 'M.2 NVMe SSD', ssd: 'SSD' };
+export const isFlash = (d) => ['sd', 'usb'].includes(driveKind(d));
+
+// SD speed class from the measured write speed (the card itself doesn't report it)
+export function cardLevel(writeMBs) {
+  if (writeMBs == null) return null;
+  if (writeMBs >= 30) return 'U3 / V30 level';
+  if (writeMBs >= 10) return 'Class 10 / U1 level';
+  if (writeMBs >= 6) return 'Class 6 level';
+  if (writeMBs >= 4) return 'Class 4 level';
+  return 'below Class 4';
+}
+
+// How fast it should be. Cards and sticks have a minimum instead of a rated speed.
 export function expectedSpeed(d) {
+  const k = driveKind(d);
   const name = norm(d.model);
   const known = RATED.find(([m]) => name.includes(m));
   const usb = /usb/i.test(d.bus || '');
-  const hdd = /hdd/i.test(d.media || '') || (d.spindle && d.spindle > 0);
-  const nvme = /nvme|pci/i.test(d.bus || '');
   let kind;
   let read;
   let write;
-  if (known) { kind = known[3]; read = known[1]; write = known[2]; }
-  else if (hdd) { kind = `Hard drive${d.spindle > 1 ? ` (${d.spindle} rpm)` : ''}`; read = d.spindle && d.spindle < 7000 ? 100 : 150; write = read; }
-  else if (nvme) { kind = 'NVMe SSD'; read = 1800; write = 1200; }
+  let minimum = false;
+  if (k === 'sd') { kind = 'SD card'; read = 15; write = 8; minimum = true; }
+  else if (k === 'usb') { kind = 'USB stick'; read = 15; write = 4; minimum = true; }
+  else if (known) { kind = known[3]; read = known[1]; write = known[2]; }
+  else if (k === 'hdd') { kind = `Hard drive${d.spindle > 1 ? ` (${d.spindle} rpm)` : ''}`; read = d.spindle && d.spindle < 7000 ? 100 : 150; write = read; }
+  else if (k === 'nvme') { kind = 'NVMe SSD'; read = 1800; write = 1200; }
   else { kind = 'SATA SSD'; read = 500; write = 450; }
-  // A USB adapter caps the speed, so the drive can't show its real numbers
-  const cap = usb ? 400 : null;
-  return { kind, read, write, rated: !!known, usb, cap, hdd, type: hdd ? 'HDD' : nvme ? 'M.2 NVMe SSD' : 'SSD' };
+  // A USB adapter caps a hard drive / SSD's speed, so it can't show its real numbers
+  const cap = usb && !minimum ? 400 : null;
+  return { kind, read, write, rated: !!known && !minimum, minimum, usb, cap, hdd: k === 'hdd', flash: minimum, k, type: KIND_NAME[k] };
 }
 
 // Health from the drive's own report
@@ -100,16 +132,19 @@ export function judgeSpeed(d, res) {
   const e = expectedSpeed(d);
   const wantRead = e.cap ? Math.min(e.read, e.cap) : e.read;
   const wantWrite = e.cap ? Math.min(e.write, e.cap) : e.write;
-  const nvme = /nvme/i.test(e.type) && !e.usb;
-  const readOk = res.read == null ? null : res.read >= wantRead * (nvme ? S.nvmeReadPass : S.readPass);
-  const writeOk = res.write == null ? null : res.write >= wantWrite * (nvme ? S.nvmeWritePass : S.writePass);
+  const nvme = e.k === 'nvme' && !e.usb;
+  // Cards / sticks: must reach the minimum. Drives: a share of their rated speed.
+  const rf = e.minimum ? 1 : nvme ? S.nvmeReadPass : S.readPass;
+  const wf = e.minimum ? 1 : nvme ? S.nvmeWritePass : S.writePass;
+  const readOk = res.read == null ? null : res.read >= wantRead * rf;
+  const writeOk = res.write == null ? null : res.write >= wantWrite * wf;
   const tested = [readOk, writeOk].filter((x) => x !== null);
-  return { e, wantRead, wantWrite, readOk, writeOk, status: !tested.length ? 'unknown' : tested.every(Boolean) ? 'pass' : 'fail' };
+  return { e, wantRead, wantWrite, readOk, writeOk, level: e.flash ? cardLevel(res.write) : null, status: !tested.length ? 'unknown' : tested.every(Boolean) ? 'pass' : 'fail' };
 }
 
 // Model name for the CeX listing search
 export function driveModel(d) {
-  const words = String(d.model || '').replace(/\b(ssd|nvme|ata|scsi|disk|device|usb|series)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  const words = String(d.model || '').replace(/\b(ssd|nvme|ata|scsi|disk|device|usb|series|generic|storage|reader|flash|sd\/mmc|multi-card)\b/gi, ' ').replace(/\s+/g, ' ').trim();
   const size = sizeLabel(d.sizeBytes);
   return words.toLowerCase().includes(size.toLowerCase()) ? words : `${words} ${size}`;
 }

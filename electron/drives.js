@@ -263,12 +263,12 @@ async function readSpeed(d, seconds = 6) {
 
 // Writes a temporary file on one of the drive's partitions (several writes at once, like a
 // benchmark), makes sure it has really reached the drive, then deletes it
-async function writeSpeed(volume) {
+async function writeSpeed(volume, maxMB = 2048) {
   const root = /^[A-Z]$/i.test(volume.letter) ? volume.letter + ':\\' : volume.letter;
   const free = Number(volume.free) || 0;
   const chunk = 8 * MB;
-  const total = Math.min(2048 * MB, Math.floor((free * 0.5) / chunk) * chunk);
-  if (total < 128 * MB) throw new Error('Not enough free space on the drive for the write test');
+  const total = Math.min(maxMB * MB, Math.floor((free * 0.5) / chunk) * chunk);
+  if (total < 64 * MB) throw new Error('Not enough free space on the drive for the write test');
   const file = path.join(root, `PTS-speedtest-${Date.now()}.tmp`);
   const data = crypto.randomBytes(chunk); // random so drives can't cheat by compressing
   const fh = await fs.promises.open(file, 'w');
@@ -292,7 +292,7 @@ async function writeSpeed(volume) {
   return Math.min(pos, total) / MB / secs;
 }
 
-async function speed(_checksDir, { number, sizeBytes, volumes }, send) {
+async function speed(_checksDir, { number, sizeBytes, volumes, flash }, send) {
   const out = { ok: true, read: null, write: null, notes: [] };
   job = { stop: false };
   try {
@@ -303,10 +303,10 @@ async function speed(_checksDir, { number, sizeBytes, volumes }, send) {
       out.notes.push('Read speed needs Windows (macOS doesn’t let apps read the drive directly)');
     }
     if (job.stop) return { ...out, stopped: true };
-    const vol = (volumes || []).filter((v) => v.free > 200 * MB).sort((a, b) => b.free - a.free)[0];
+    const vol = (volumes || []).filter((v) => v.free > 150 * MB).sort((a, b) => b.free - a.free)[0];
     if (vol) {
       send({ phase: 'write' });
-      try { out.write = await writeSpeed(vol); } catch (err) { out.notes.push('Write test: ' + err.message); }
+      try { out.write = await writeSpeed(vol, flash ? 256 : 2048); } catch (err) { out.notes.push('Write test: ' + err.message); }
     } else {
       out.notes.push('No partition with free space, so write speed wasn’t tested (format the drive to test it)');
     }
@@ -316,6 +316,138 @@ async function speed(_checksDir, { number, sizeBytes, volumes }, send) {
   return out;
 }
 
+// ---- Fake capacity check (SD cards and USB sticks) --------------------------
+// Fills the free space with test files, reads every byte back, then deletes them.
+// Fake cards claim more space than they have: data past their real size comes back wrong.
+// Files already on the card are never touched.
+
+const FILE_SIZE = 256 * MB;
+const CHUNK = 8 * MB;
+const UV_FS_O_DIRECT = 0x02000000; // read past Windows' memory cache, straight from the card
+
+// Test data: every 4 KB block is different and depends on where it is, so data that has
+// been moved, repeated or lost can't pass
+function pattern(buf, globalOffset, seed) {
+  const u = new Uint32Array(buf.buffer, buf.byteOffset, buf.length / 4);
+  for (let i = 0; i < u.length; i += 1024) {
+    let x = (((globalOffset / 4096) + i / 1024) * 2654435761 ^ seed) >>> 0 || 1;
+    for (let j = 0; j < 1024; j++) {
+      x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0;
+      u[i + j] = x;
+    }
+  }
+}
+
+async function openForVerify(file) {
+  if (process.platform === 'win32') {
+    try {
+      const fh = await fs.promises.open(file, UV_FS_O_DIRECT);
+      const b = Buffer.alloc(CHUNK);
+      await fh.read(b, 0, 4096, 0); // direct reads can be fussy: check it works
+      return { fh, direct: true };
+    } catch { /* fall back to a normal read */ }
+  }
+  return { fh: await fs.promises.open(file, 'r'), direct: false };
+}
+
+async function capacity(_checksDir, { volumes, limitBytes }, send) {
+  const vol = (volumes || []).slice().sort((a, b) => (b.free || 0) - (a.free || 0))[0];
+  if (!vol) return { ok: false, error: 'The card has no partition with a drive letter. Format it first, then test again.' };
+  const root = /^[A-Z]$/i.test(vol.letter) ? vol.letter + ':\\' : vol.letter;
+  const dir = path.join(root, 'PTS-capacity-check');
+  const free = Math.max(0, Number(vol.free) - 16 * MB); // leave a little room
+  const total = Math.min(limitBytes || Infinity, Math.floor(free / CHUNK) * CHUNK);
+  if (total < CHUNK) return { ok: false, error: 'No free space on the card to test. Delete some files or format it.' };
+  const seed = (Date.now() & 0x7fffffff) >>> 0;
+  const cells = 600;
+  const map = new Array(cells).fill('.');
+  const markMap = (offset, len, v) => {
+    for (let c = Math.floor((offset / total) * cells); c <= Math.min(cells - 1, Math.floor(((offset + len - 1) / total) * cells)); c++) {
+      if (v === 'b' || map[c] !== 'b') map[c] = v;
+    }
+  };
+  const res = { ok: true, phase: 'write', done: 0, total: total * 2, written: 0, verified: 0, badBytes: 0, firstBad: null, startedAt: Date.now() };
+  job = { stop: false };
+  const buf = Buffer.alloc(CHUNK);
+  const want = Buffer.alloc(CHUNK);
+  const files = [];
+  let lastSend = 0;
+  const progress = (force) => {
+    const now = Date.now();
+    if (!force && now - lastSend < 300) return;
+    lastSend = now;
+    const secs = (now - res.startedAt) / 1000;
+    send({ ...res, map: map.join(''), speed: res.done / MB / Math.max(secs, 0.001), eta: secs > 3 && res.done ? ((res.total - res.done) / res.done) * secs : null });
+  };
+  try {
+    await fs.promises.mkdir(dir, { recursive: true });
+    // 1. Write
+    let offset = 0;
+    writing: while (offset < total) {
+      const file = path.join(dir, `test-${String(files.length + 1).padStart(4, '0')}.bin`);
+      const size = Math.min(FILE_SIZE, total - offset);
+      const fh = await fs.promises.open(file, 'w');
+      files.push({ file, offset, size });
+      try {
+        for (let o = 0; o < size; o += CHUNK) {
+          if (job.stop) break writing;
+          pattern(buf, offset + o, seed);
+          try {
+            await fh.write(buf, 0, CHUNK, o);
+          } catch (err) {
+            if (err.code === 'ENOSPC') { files[files.length - 1].size = o; res.note = 'The card ran out of space sooner than it said it would'; break writing; }
+            throw err;
+          }
+          res.written += CHUNK; res.done += CHUNK;
+          markMap(offset + o, CHUNK, 'w');
+          progress();
+        }
+        await fh.sync();
+      } finally {
+        await fh.close().catch(() => {});
+      }
+      offset += size;
+    }
+    // 2. Read it all back and compare
+    res.phase = 'verify';
+    progress(true);
+    for (const f of files) {
+      if (job.stop) break;
+      const { fh, direct } = await openForVerify(f.file);
+      if (!direct) res.cached = true;
+      try {
+        for (let o = 0; o < f.size; o += CHUNK) {
+          if (job.stop) break;
+          pattern(want, f.offset + o, seed);
+          let ok = false;
+          try {
+            const { bytesRead } = await fh.read(buf, 0, CHUNK, o);
+            ok = bytesRead === CHUNK && buf.equals(want);
+          } catch { ok = false; }
+          if (!ok) { res.badBytes += CHUNK; if (res.firstBad == null) res.firstBad = f.offset + o; }
+          res.verified += CHUNK; res.done += CHUNK;
+          markMap(f.offset + o, CHUNK, ok ? 'g' : 'b');
+          progress();
+        }
+      } finally {
+        await fh.close().catch(() => {});
+      }
+    }
+    if (job.stop) res.stopped = true;
+  } catch (err) {
+    res.ok = false;
+    res.error = err.code === 'EACCES' || err.code === 'EPERM' ? 'The card is write-protected (check the lock switch on the side of SD cards).' : err.message;
+  } finally {
+    // 3. Tidy up: remove every test file
+    for (const f of files) await fs.promises.unlink(f.file).catch(() => {});
+    await fs.promises.rmdir(dir).catch(() => {});
+    job = null;
+  }
+  res.realBytes = res.firstBad != null ? res.firstBad : res.written;
+  const secs = (Date.now() - res.startedAt) / 1000;
+  return { ...res, map: map.join(''), seconds: secs, speed: res.done / MB / Math.max(secs, 0.001) };
+}
+
 function stop() {
   if (job) {
     job.stop = true;
@@ -323,4 +455,4 @@ function stop() {
   return { ok: true };
 }
 
-module.exports = { listDrives, scan, speed, stop };
+module.exports = { listDrives, scan, speed, capacity, stop };

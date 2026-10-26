@@ -14,6 +14,8 @@ app.whenReady().then(async () => {
     say('scan', JSON.stringify({ ok: scan.ok, error: scan.error, details: scan.details, blocks: scan.blocks, bad: scan.badBytes, speed: Math.round(scan.speed || 0), note: scan.note }));
     const sp = await drives.speed('', { number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes }, () => {});
     say('speed', JSON.stringify(sp));
+    const cap = await drives.capacity('', { volumes: d.volumes, limitBytes: 512 * 1024 * 1024 }, () => {});
+    say('capacity', JSON.stringify({ ok: cap.ok, error: cap.error, written: cap.written, bad: cap.badBytes, cached: cap.cached, secs: Math.round(cap.seconds) }));
   } catch (err) {
     say('error', err.stack);
   }

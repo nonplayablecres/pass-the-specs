@@ -83,6 +83,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let mockStop = false;
 const mockProgress = new Set();
 const MOCK_DRIVES = [
+  { number: 3, model: 'Generic- SD/MMC', media: 'Unspecified', bus: 'USB', sizeBytes: 63864569856, health: 'Unknown', boot: false, smart: {}, volumes: [{ letter: 'G', label: 'CARD', fs: 'exFAT', size: 63850000000, free: 63000000000 }] },
   { number: 0, model: 'KXG60ZNV256G NVMe TOSHIBA 256GB', media: 'SSD', bus: 'NVMe', sizeBytes: 256060514304, health: 'Healthy', boot: true, volumes: [], smart: {} },
   { number: 1, model: 'Samsung SSD 970 EVO Plus 1TB', serial: 'S4EWNX0R123456', media: 'SSD', bus: 'NVMe', sizeBytes: 1000204886016, health: 'Healthy', boot: false, temp: 38, wear: 3, hours: 4120, readErrors: 0, writeErrors: 0, predictFail: false, smart: {}, volumes: [{ letter: 'E', label: 'Data', fs: 'NTFS', size: 1000202833920, free: 812345678901 }] },
   { number: 2, model: 'ST1000DM010-2EP102', serial: 'Z9A1B2C3', media: 'HDD', bus: 'SATA', spindle: 7200, sizeBytes: 1000204886016, health: 'Healthy', boot: false, temp: 34, wear: null, hours: 21877, readErrors: 0, writeErrors: 0, predictFail: false, smart: { 5: { raw: 8 }, 197: { raw: 0 }, 198: { raw: 0 }, 9: { raw: 21877 } }, volumes: [{ letter: 'F', label: '', fs: 'NTFS', size: 1000202833920, free: 999000000000 }] }
@@ -179,7 +180,26 @@ export const bridge = {
     await wait(1200);
     mockProgress.forEach((fn) => fn({ phase: 'write' }));
     await wait(900);
-    return opts.number === 2 ? { ok: true, read: 141.2, write: 128.4, notes: [] } : { ok: true, read: 3290.5, write: 2810.2, notes: [] };
+    return opts.number === 3 ? { ok: true, read: 88.4, write: 41.7, notes: [] } : opts.number === 2 ? { ok: true, read: 141.2, write: 128.4, notes: [] } : { ok: true, read: 3290.5, write: 2810.2, notes: [] };
+  },
+  async driveCapacity(opts) {
+    if (hasShell) return window.pts.driveCapacity ? window.pts.driveCapacity(opts) : { ok: false, error: 'Needs the newest app' };
+    mockStop = false;
+    const total = 16 * 1e9;
+    const res = { ok: true, phase: 'write', done: 0, total: total * 2, written: 0, verified: 0, badBytes: 0, firstBad: null };
+    for (let i = 1; i <= 30 && !mockStop; i++) {
+      await wait(120);
+      const writing = i <= 15;
+      res.phase = writing ? 'write' : 'verify';
+      res.done = (res.total * i) / 30;
+      res.written = Math.min(total, res.done);
+      const fill = writing ? Math.round((600 * i) / 15) : 600;
+      const checked = writing ? 0 : Math.round((600 * (i - 15)) / 15);
+      res.map = Array.from({ length: 600 }, (_, c) => (c < checked ? (opts.fake && c > 150 ? 'b' : 'g') : c < fill ? 'w' : '.')).join('');
+      mockProgress.forEach((fn) => fn({ ...res, speed: 42, eta: (30 - i) * 0.12 }));
+    }
+    if (opts.fake) { res.badBytes = 12e9; res.firstBad = 4e9; }
+    return { ...res, realBytes: res.firstBad != null ? res.firstBad : res.written, stopped: mockStop, speed: 42 };
   },
   async driveStop() { if (hasShell) return window.pts.driveStop(); mockStop = true; return { ok: true }; },
   onDriveProgress(fn) {
