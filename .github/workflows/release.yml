@@ -96,7 +96,10 @@ jobs:
         shell: powershell
         run: |
           $json = powershell -NoProfile -ExecutionPolicy Bypass -File public/checks/drives.ps1
-          $json
           $d = ($json | ConvertFrom-Json)[0]
-          powershell -NoProfile -ExecutionPolicy Bypass -File public/checks/drive-read.ps1 -Disk $d.number -Mode quick -Size $d.sizeBytes -Hdd 0 | Select-Object -Last 3
-          powershell -NoProfile -ExecutionPolicy Bypass -File public/checks/drive-read.ps1 -Disk $d.number -Mode speed -Size $d.sizeBytes -Seconds 3
+          Write-Output "::notice title=drives::$($d.model) $($d.bus) $($d.sizeBytes) health=$($d.health)"
+          $scan = powershell -NoProfile -ExecutionPolicy Bypass -File public/checks/drive-read.ps1 -Disk $d.number -Mode quick -Size $d.sizeBytes -Hdd 0 | Select-Object -Last 1
+          Write-Output "::notice title=scan::$scan"
+          $speed = powershell -NoProfile -ExecutionPolicy Bypass -File public/checks/drive-read.ps1 -Disk $d.number -Mode speed -Size $d.sizeBytes -Seconds 3 | Select-Object -Last 1
+          Write-Output "::notice title=speed::$speed"
+          if (-not ($scan -like 'R *') -or -not ($speed -like 'R *')) { exit 1 }
