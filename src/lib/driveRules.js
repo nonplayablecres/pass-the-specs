@@ -6,7 +6,11 @@ export const DRIVE_SETTINGS = {
   wearWarn: 70,
   tempWarn: 65, // °C
   readPass: 0.7, // must reach this share of its rated read speed
-  writePass: 0.5 // writes vary more (cache, how full it is), so a lower bar
+  writePass: 0.5, // writes vary more (cache, how full it is), so a lower bar
+  // NVMe drives are rated with dozens of reads at once, which this test doesn't do,
+  // so they get a lower bar
+  nvmeReadPass: 0.4,
+  nvmeWritePass: 0.3
 };
 
 // Rated sequential read / write in MB/s for common drives.
@@ -96,8 +100,9 @@ export function judgeSpeed(d, res) {
   const e = expectedSpeed(d);
   const wantRead = e.cap ? Math.min(e.read, e.cap) : e.read;
   const wantWrite = e.cap ? Math.min(e.write, e.cap) : e.write;
-  const readOk = res.read == null ? null : res.read >= wantRead * S.readPass;
-  const writeOk = res.write == null ? null : res.write >= wantWrite * S.writePass;
+  const nvme = /nvme/i.test(e.type) && !e.usb;
+  const readOk = res.read == null ? null : res.read >= wantRead * (nvme ? S.nvmeReadPass : S.readPass);
+  const writeOk = res.write == null ? null : res.write >= wantWrite * (nvme ? S.nvmeWritePass : S.writePass);
   const tested = [readOk, writeOk].filter((x) => x !== null);
   return { e, wantRead, wantWrite, readOk, writeOk, status: !tested.length ? 'unknown' : tested.every(Boolean) ? 'pass' : 'fail' };
 }

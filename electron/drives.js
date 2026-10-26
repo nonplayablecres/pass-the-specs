@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 const { run, runScript } = require('./systemInfo');
 
 const MB = 1024 * 1024;
@@ -74,36 +75,61 @@ const ALIGN = 4096;
 const alignDown = (n) => Math.floor(n / ALIGN) * ALIGN;
 const MAP_CELLS = 600; // squares in the sector map
 
+// Is the app running as administrator? (needed to read a drive directly)
+function isAdmin() {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') { resolve(false); return; }
+    execFile('net', ['session'], { windowsHide: true }, (err) => resolve(!err));
+  });
+}
+
+const errText = (err) => (err ? [err.code, err.errno, err.syscall].filter((x) => x != null).join(' ') : 'ok');
+
 // Opens the whole drive. Tries the usual name, then two other names Windows uses for it,
-// then (last resort) one of its partitions. Returns { fh, size, note }.
+// then (last resort) one of its partitions. Every try is checked with a real read, and
+// what happened is kept so a failure can be explained. Returns { fh, size, note }.
 async function openRaw(d) {
   const test = process.env.PTS_RAW_TEST; // developer testing only: a file standing in for a disk
   if (test) return { fh: await fs.promises.open(test, 'r'), size: d.sizeBytes };
   if (process.platform !== 'win32') throw new Error('Reading the whole drive needs Windows');
   const n = Number(d.number);
-  const tries = [`\\\\.\\PhysicalDrive${n}`, `\\\\?\\GLOBALROOT\\Device\\Harddisk${n}\\Partition0`, `\\\\?\\GLOBALROOT\\Device\\Harddisk${n}\\DR${n}`];
-  const errors = [];
-  for (const p of tries) {
+  const tries = [
+    { p: `\\\\.\\PhysicalDrive${n}`, size: d.sizeBytes },
+    { p: `\\\\?\\GLOBALROOT\\Device\\Harddisk${n}\\Partition0`, size: d.sizeBytes },
+    { p: `\\\\?\\GLOBALROOT\\Device\\Harddisk${n}\\DR${n}`, size: d.sizeBytes },
+    ...(d.volumes || []).filter((x) => /^[A-Z]$/i.test(x.letter)).sort((a, b) => b.size - a.size)
+      .map((v) => ({ p: `\\\\.\\${v.letter}:`, size: Number(v.size), note: `Scanned the ${v.letter}: partition (Windows wouldn’t open the whole drive)` }))
+  ];
+  const log = [`admin=${await isAdmin()}`, `electron=${process.versions.electron} node=${process.versions.node} uv=${process.versions.uv}`];
+  for (const t of tries) {
+    let fh = null;
     try {
-      const fh = await fs.promises.open(p, 'r');
-      const buf = Buffer.alloc(ALIGN);
-      await fh.read(buf, 0, ALIGN, 0); // make sure it can actually be read
-      return { fh, size: d.sizeBytes };
+      fh = await fs.promises.open(t.p, 'r');
     } catch (err) {
-      errors.push(err.code || err.message);
+      log.push(`${t.p} open: ${errText(err)}`);
+      continue;
     }
-  }
-  // Partitions with a drive letter, largest first
-  for (const v of (d.volumes || []).filter((x) => /^[A-Z]$/i.test(x.letter)).sort((a, b) => b.size - a.size)) {
+    const buf = Buffer.alloc(MB);
     try {
-      const fh = await fs.promises.open(`\\\\.\\${v.letter}:`, 'r');
-      return { fh, size: Number(v.size), note: `Scanned the ${v.letter}: partition (Windows wouldn’t open the whole drive)` };
+      await fh.read(buf, 0, MB, 0);
+      await fh.read(buf, 0, MB, alignDown(t.size / 2));
+      return { fh, size: t.size, note: t.note, log };
     } catch (err) {
-      errors.push(err.code || err.message);
+      log.push(`${t.p} read: ${errText(err)}`);
+      await fh.close().catch(() => {});
     }
+    // Same again with the older (non-promise) calls, in case only those work
+    try {
+      const fd = fs.openSync(t.p, 'r');
+      try { fs.readSync(fd, buf, 0, 4096, 0); log.push(`${t.p} sync read: ok`); } catch (err) { log.push(`${t.p} sync read: ${errText(err)}`); }
+      fs.closeSync(fd);
+    } catch (err) { log.push(`${t.p} sync open: ${errText(err)}`); }
   }
-  if (errors.some((c) => c === 'EPERM' || c === 'EACCES')) throw new Error('Windows blocked reading the drive. Close the app and open it again, choosing Yes when Windows asks.');
-  throw new Error(`Windows wouldn’t open the drive for reading (${[...new Set(errors)].join(', ')}). Try another cable / port, or the drive may be faulty.`);
+  const e = new Error(log[0] === 'admin=false'
+    ? 'The app isn’t running as administrator, so Windows won’t let it read the drive. Close it and open it again, choosing Yes when Windows asks.'
+    : 'Windows wouldn’t let the app read this drive.');
+  e.details = log.join('\n');
+  throw e;
 }
 
 // Read one block; returns ms taken, or -1 if it couldn't be read
@@ -140,7 +166,7 @@ async function scan(_checksDir, { number, mode, sizeBytes, media, volumes }, sen
     opened = await openRaw({ number, sizeBytes, volumes });
   } catch (err) {
     job = null;
-    return { ok: false, mode, error: err.message };
+    return { ok: false, mode, error: err.message, details: err.details };
   }
   const { fh, note } = opened;
   const size = alignDown(opened.size);
@@ -163,7 +189,7 @@ async function scan(_checksDir, { number, mode, sizeBytes, media, volumes }, sen
     const to = Math.min(MAP_CELLS - 1, Math.floor(((o + len - 1) / size) * MAP_CELLS));
     for (let c = from; c <= to; c++) if (rank[v] > rank[map[c]]) map[c] = v;
   };
-  const res = { mode, note, done: 0, total, badBytes: 0, badSpots: [], slow: 0, blocks: 0, startedAt: Date.now() };
+  const res = { mode, note, failedInARow: 0, done: 0, total, badBytes: 0, badSpots: [], slow: 0, blocks: 0, startedAt: Date.now() };
   const buf = Buffer.alloc(block);
   let lastSend = 0;
   try {
@@ -173,6 +199,13 @@ async function scan(_checksDir, { number, mode, sizeBytes, media, volumes }, sen
       if (len <= 0) continue;
       const ms = await readBlock(fh, buf, o, len);
       res.blocks++;
+      // Nothing at all can be read: that's the app being blocked, not bad sectors
+      if (ms < 0 && res.blocks === res.failedInARow + 1) res.failedInARow++;
+      if (res.failedInARow >= 24) {
+        await fh.close().catch(() => {});
+        job = null;
+        return { ok: false, mode, error: 'Windows opened the drive but wouldn’t let the app read from it, so the scan can’t run.', details: (opened.log || []).join('\n') };
+      }
       if (ms < 0) {
         const bad = await measureBad(fh, o, len);
         res.badBytes += bad || len;
@@ -207,13 +240,14 @@ async function readSpeed(d, seconds = 6) {
   const limit = Math.max(alignDown(Math.min(s, 4096 * MB)) - chunk, chunk);
   let pos = 0;
   let bytes = 0;
+  let lastErr = null;
   const t0 = performance.now();
   const worker = async () => {
     const buf = Buffer.alloc(chunk);
     while (performance.now() - t0 < seconds * 1000 && !(job && job.stop)) {
       const o = pos % limit;
       pos += chunk;
-      try { const { bytesRead } = await fh.read(buf, 0, chunk, o); bytes += bytesRead; } catch { /* bad area: skip */ }
+      try { const { bytesRead } = await fh.read(buf, 0, chunk, o); bytes += bytesRead; } catch (err) { lastErr = err; }
     }
   };
   try {
@@ -221,30 +255,41 @@ async function readSpeed(d, seconds = 6) {
   } finally {
     await fh.close().catch(() => {});
   }
+  if (!bytes) throw new Error('nothing could be read (' + errText(lastErr) + ')');
   return bytes / MB / ((performance.now() - t0) / 1000);
 }
 
 // ---- Speed -----------------------------------------------------------------
 
-// Writes a temporary file on one of the drive's partitions, flushes it to the drive, deletes it
+// Writes a temporary file on one of the drive's partitions (several writes at once, like a
+// benchmark), makes sure it has really reached the drive, then deletes it
 async function writeSpeed(volume) {
   const root = /^[A-Z]$/i.test(volume.letter) ? volume.letter + ':\\' : volume.letter;
   const free = Number(volume.free) || 0;
-  const total = Math.min(1024 * MB, Math.floor((free * 0.5) / (8 * MB)) * 8 * MB);
+  const chunk = 8 * MB;
+  const total = Math.min(2048 * MB, Math.floor((free * 0.5) / chunk) * chunk);
   if (total < 128 * MB) throw new Error('Not enough free space on the drive for the write test');
   const file = path.join(root, `PTS-speedtest-${Date.now()}.tmp`);
-  const data = crypto.randomBytes(8 * MB); // random so drives can't cheat by compressing
+  const data = crypto.randomBytes(chunk); // random so drives can't cheat by compressing
   const fh = await fs.promises.open(file, 'w');
+  let pos = 0;
   const t0 = performance.now();
   try {
-    for (let done = 0; done < total && !(job && job.stop); done += data.length) await fh.write(data, 0, data.length);
+    const worker = async () => {
+      while (pos < total && !(job && job.stop)) {
+        const o = pos;
+        pos += chunk;
+        await fh.write(data, 0, chunk, o);
+      }
+    };
+    await Promise.all(Array.from({ length: 4 }, worker));
     await fh.sync();
   } finally {
     await fh.close().catch(() => {});
   }
   const secs = (performance.now() - t0) / 1000;
   await fs.promises.unlink(file).catch(() => {});
-  return total / MB / secs;
+  return Math.min(pos, total) / MB / secs;
 }
 
 async function speed(_checksDir, { number, sizeBytes, volumes }, send) {
@@ -253,7 +298,7 @@ async function speed(_checksDir, { number, sizeBytes, volumes }, send) {
   try {
     if (process.platform === 'win32') {
       send({ phase: 'read' });
-      try { out.read = await readSpeed({ number, sizeBytes, volumes }); } catch (err) { out.notes.push('Read test: ' + err.message); }
+      try { out.read = await readSpeed({ number, sizeBytes, volumes }); } catch (err) { out.notes.push('Read test: ' + err.message); if (err.details) out.details = err.details; }
     } else {
       out.notes.push('Read speed needs Windows (macOS doesn’t let apps read the drive directly)');
     }

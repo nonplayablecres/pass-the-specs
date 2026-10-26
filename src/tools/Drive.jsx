@@ -64,6 +64,19 @@ function Health({ d, report }) {
   );
 }
 
+// Technical details of why reading failed, to copy and send for help
+function Details({ text }) {
+  const [copied, setCopied] = useState(false);
+  if (!text) return null;
+  return (
+    <details className="drive-details">
+      <summary>Technical details</summary>
+      <pre>{text}</pre>
+      <button type="button" className="btn" style={{ minHeight: 36 }} onClick={() => { bridge.copy(text); setCopied(true); }}>{copied ? 'Copied ✓' : 'Copy details'}</button>
+    </details>
+  );
+}
+
 // The whole drive as a grid of squares, start (top left) to end (bottom right):
 // grey = not read yet, green = reads fine, amber = slow (weak), red = unreadable
 function SectorMap({ map }) {
@@ -109,7 +122,7 @@ function Scan({ d, report }) {
         const pct = r.total ? Math.min(100, (r.done / r.total) * 100) : 0;
         return (
           <div className={'drive-panel ' + (busy ? '' : r.error ? 'fail' : r.badBytes > 0 || r.slow > 10 ? 'fail' : r.stopped ? '' : 'pass')}>
-            {r.error ? <span className="bad">{r.error}</span> : (
+            {r.error ? <><span className="bad">{r.error}</span><Details text={r.details} /></> : (
               <>
                 {r.map && <SectorMap map={r.map} />}
                 <div className="bar big"><div style={{ width: `${pct}%` }} /></div>
@@ -167,6 +180,7 @@ function Speed({ d, report }) {
           {row('READ', res.read, j.wantRead, j.readOk)}
           {row('WRITE', res.write, j.wantWrite, j.writeOk)}
           {res.notes.map((n) => <span key={n} className="muted">{n}</span>)}
+          <Details text={res.details} />
         </div>
       )}
     </div>
