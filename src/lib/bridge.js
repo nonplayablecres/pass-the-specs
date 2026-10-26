@@ -188,9 +188,9 @@ export const bridge = {
     for (let i = 1; i <= 3; i++) {
       await wait(400);
       for (let c = 0; c < 128; c++) map[c] = i === 1 ? '.' : i === 2 ? 'w' : 'g';
-      mockProgress.forEach((fn) => fn({ phase: ['save', 'write', 'check'][i - 1], done: i * 128, total: 384, map: map.join('') }));
+      mockProgress.forEach((fn) => fn({ phase: ['wipe', 'write', 'check'][i - 1], done: i * 128, total: 384, map: map.join('') }));
     }
-    return { ok: true, spots: 128, badSpots: 0, realBytes: opts.sizeBytes, map: map.join(''), seconds: 4.2 };
+    return { ok: true, spots: 128, badSpots: 0, realBytes: opts.sizeBytes, map: map.join(''), seconds: 4.2, wiped: true, formatted: true, fsType: 'EXFAT' };
   },
   async driveCapacity(opts) {
     if (hasShell) return window.pts.driveCapacity ? window.pts.driveCapacity(opts) : { ok: false, error: 'Needs the newest app' };

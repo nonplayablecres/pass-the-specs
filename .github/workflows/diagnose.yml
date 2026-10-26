@@ -21,11 +21,12 @@ jobs:
           (Get-FileHash V:\photo.bin).Hash | Set-Content before.txt
       - run: npx electron scripts/drive-selftest.js V
         timeout-minutes: 5
-      - name: File on the card unchanged and file system clean
+        env:
+          PTS_SELFTEST: '1'
+      - name: Card wiped and formatted again
         shell: pwsh
         run: |
-          $same = (Get-FileHash V:\photo.bin).Hash -eq (Get-Content before.txt)
-          $chk = chkdsk V: 2>&1 | Out-String
-          $clean = $chk -match 'found no problems|no further action'
-          Write-Output "::notice title=after::file unchanged=$same, chkdsk clean=$clean, leftovers=$((Get-ChildItem V:\ -Force | Select-Object -ExpandProperty Name) -join ',')"
-          if (-not $same) { exit 1 }
+          $vhd = Get-DiskImage -ImagePath "$env:RUNNER_TEMP\card.vhdx"
+          $vols = Get-Disk -Number $vhd.Number | Get-Partition | Get-Volume
+          Write-Output "::notice title=after::$($vols | Select-Object DriveLetter,FileSystem,Size,HealthStatus | ConvertTo-Json -Compress)"
+          if (-not ($vols | Where-Object FileSystem)) { exit 1 }

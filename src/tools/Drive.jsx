@@ -194,9 +194,9 @@ function Speed({ d, report }) {
   );
 }
 
-// Fake capacity check. Quick (starts by itself, seconds): checks 128 spots across the size
-// the card claims, putting the original data back. Full (button): fills the free space with
-// test data and reads every byte back.
+// Fake capacity check. Quick (seconds): wipes the card, checks 128 spots across the size it
+// claims, then formats it again. Full: fills the free space with test data and reads every
+// byte back, keeping the files on it.
 function Capacity({ d, report }) {
   const s = useDriveState();
   const flash = isFlash(d);
@@ -216,7 +216,9 @@ function Capacity({ d, report }) {
   };
   const quick = async () => {
     setState({ running: 'cap', progress: null, cap: null });
-    finish(await bridge.driveProbe({ number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes }), 'quick');
+    const out = await bridge.driveProbe({ number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes });
+    finish(out, 'quick');
+    if (out.wiped) loadDrives(); // it has a new partition / drive letter now
   };
   const full = async () => {
     setState({ running: 'cap', progress: null, cap: null });
@@ -224,25 +226,24 @@ function Capacity({ d, report }) {
   };
   useEffect(() => {
     if (!flash) report('na', 'Only needed for SD cards and USB sticks', { advance: true });
-    else if (!res && !state.running && !isMac) quick();
   }, [d.number]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!flash) return <div className="hint">Only needed for SD cards and USB sticks. Skipped.</div>;
 
   const sp = s.speed && s.speed.number === d.number ? s.speed : null;
   const est = vol ? vol.free / 1e6 / Math.max(5, (sp && sp.write) || 15) + vol.free / 1e6 / Math.max(10, (sp && sp.read) || 40) : null;
   const r = p || res;
-  const kind = busy ? (p && ['save', 'write', 'check'].includes(p.phase) ? 'quick' : 'full') : res && res.kind;
+  const kind = busy ? (p && ['wipe', 'write', 'check', 'format'].includes(p.phase) ? 'quick' : 'full') : res && res.kind;
   const pct = !busy && res && !res.stopped && !res.error ? 100 : r && r.total ? Math.min(100, (r.done / r.total) * 100) : 0;
   const fake = r && !busy && (kind === 'quick' ? r.badSpots > 0 : r.badBytes > 0 || r.note);
-  const PHASE = { save: 'Saving', write: 'Marking', check: 'Checking', verify: 'Checking' };
+  const PHASE = { wipe: 'Wiping', write: 'Marking', check: 'Checking', format: 'Formatting', verify: 'Checking' };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="tool-row">
-        {!isMac && <button type="button" className="btn primary" disabled={busy} onClick={quick}>{res && res.kind === 'quick' ? '↻ QUICK CHECK' : '▶ QUICK CHECK'}</button>}
+        {!isMac && <button type="button" className="btn primary" disabled={busy} onClick={quick}>{res && res.kind === 'quick' ? '↻ QUICK CHECK' : '▶ QUICK CHECK'} · WIPES CARD</button>}
         <button type="button" className="btn" disabled={busy || !vol} onClick={full}>▶ FULL CHECK</button>
         {busy && kind === 'full' && <button type="button" className="btn" onClick={() => bridge.driveStop()}>■ Stop</button>}
         <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>
-          {!isMac && 'Quick: a few seconds, tests 128 spots across the card. '}
+          {!isMac && 'Quick: about 30 seconds. Wipes the card, tests 128 spots across it, then formats it ready to sell. '}
           {vol ? `Full: writes and reads back all ${sizeLabel(vol.free)} of free space${est ? `, about ${dur(est)}` : ''}.` : 'Full: needs a formatted card.'}
         </span>
       </div>
@@ -260,7 +261,8 @@ function Capacity({ d, report }) {
               {!busy && !r.stopped && (fake
                 ? <span className="bad">✕ FAKE CAPACITY: says {claimed}, only about {(r.realBytes / 1e9).toFixed(1)} GB really works{r.note ? `. ${r.note}` : ''}</span>
                 : <span>✓ Real {claimed}{kind === 'quick' ? ' (all 128 spots held their data)' : `: all ${(r.written / 1e9).toFixed(1)} GB checked`}</span>)}
-              {!busy && r.warning && <span className="meh">! {r.warning}</span>}
+              {!busy && kind === 'quick' && r.formatted && <span className="muted">Wiped and formatted as {r.fsType}, ready to sell.</span>}
+              {!busy && r.warning && <><span className="meh">! {r.warning}</span><Details text={r.details} /></>}
               {!busy && r.cached && <span className="muted">Windows may have kept some test data in memory, so small fakes could slip through.</span>}
             </>
           )}

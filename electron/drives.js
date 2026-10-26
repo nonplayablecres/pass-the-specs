@@ -449,118 +449,110 @@ async function capacity(_checksDir, { volumes, limitBytes }, send) {
 }
 
 // ---- Quick fake capacity check (Windows) -----------------------------------
-// Like the well-known fake-card tools: instead of filling the card, it checks ~128 spots
-// spread over the whole size the card claims. Each spot's original data is saved, a unique
-// marker is written, everything is read back, then the original data is put back.
-// A fake card can't hold markers past its real size: they come back wrong or overwrite
-// earlier ones. Takes seconds. The card's volume is dismounted for those seconds, because
-// Windows won't let anything write to a mounted card directly.
+// Like the well-known fake-card tools: instead of filling the card, it checks 128 spots
+// spread over the whole size the card claims. A fake card can't hold markers past its real
+// size: they come back wrong, or turn up lower down (the card "wraps round").
+// Windows won't let an app write directly to a card that has a mounted volume, so the card
+// is WIPED first and FORMATTED again at the end (exFAT, or FAT32 for 32 GB and under).
+// It only ever runs on a drive Windows reports as USB / SD, never this computer's own drive.
 
-function fsutilDismount(letter) {
-  return new Promise((resolve) => execFile('fsutil', ['volume', 'dismount', `${letter}:`], { windowsHide: true }, (err) => resolve(!err)));
+function diskpart(lines) {
+  return new Promise((resolve) => {
+    const file = path.join(require('os').tmpdir(), `pts-diskpart-${Date.now()}.txt`);
+    fs.writeFileSync(file, lines.join('\r\n') + '\r\n', 'ascii');
+    execFile('diskpart', ['/s', file], { windowsHide: true, timeout: 120000 }, (err, stdout) => {
+      fs.unlink(file, () => {});
+      resolve({ ok: !err, out: String(stdout || '') });
+    });
+  });
 }
 
-async function probe(_checksDir, { number, sizeBytes, volumes }, send) {
-  if (process.platform !== 'win32' && !process.env.PTS_RAW_TEST) return { ok: false, error: 'The quick check needs Windows. Use the full check instead.' };
+async function probe(checksDir, { number, sizeBytes }, send) {
+  const testFile = process.env.PTS_RAW_TEST;
+  if (process.platform !== 'win32' && !testFile) return { ok: false, error: 'The quick check needs Windows. Use the full check instead.' };
+  const n = Number(number);
+  const t0 = Date.now();
+
+  // Safety first: look the drive up again and refuse anything that isn't a card / stick
+  if (!testFile) {
+    const list = await listDrives(checksDir);
+    const d = list.ok ? list.drives.find((x) => Number(x.number) === n) : null;
+    const cardBus = d && (/usb|^sd$|^mmc$/i.test(d.bus || '') || process.env.PTS_SELFTEST === '1');
+    if (!d || d.boot || !cardBus || Math.abs(Number(d.sizeBytes) - Number(sizeBytes)) > 1e6) {
+      return { ok: false, error: 'Stopped for safety: that drive doesn’t look like a removable card or stick, so it wasn’t touched.' };
+    }
+  }
+
   const SPOTS = 128;
   const BLOCK = 256 * 1024; // bigger than a card's own memory cache, so it can't fake the read-back
-  const START = 16 * MB; // keep clear of the card's file list at the start
   const size = alignDown(Number(sizeBytes));
-  if (size < START + SPOTS * BLOCK) return { ok: false, error: 'The card is too small to test.' };
-  const offsets = Array.from({ length: SPOTS }, (_, i) => alignDown(START + ((size - START - BLOCK) * i) / (SPOTS - 1)));
-  const letters = (volumes || []).map((v) => v.letter).filter((l) => /^[A-Z]$/i.test(l));
+  if (size < SPOTS * BLOCK * 2) return { ok: false, error: 'The card is too small to test.' };
+  const offsets = Array.from({ length: SPOTS }, (_, i) => alignDown(((size - BLOCK) * i) / (SPOTS - 1)));
   const seed = (Date.now() & 0x7fffffff) >>> 0;
-  const t0 = Date.now();
   const map = new Array(SPOTS).fill('.');
-  const tell = (phase, done) => send({ phase, done, total: SPOTS * 3, map: map.join('') });
+  const tell = (phase, done) => send({ phase, done, total: SPOTS * 2 + 2, map: map.join('') });
+  const res = { ok: true, spots: SPOTS, badSpots: 0, firstBad: null, lastGood: 0, wiped: false, formatted: false };
   job = { stop: false };
 
-  // Open the whole card for reading and writing
-  // Windows only accepts writes to a disk through the plain (non-promise) file calls,
-  // so this uses those, pausing between spots to keep the app responsive
-  let fd = null;
-  const errors = [];
-  const paths = process.env.PTS_RAW_TEST ? [process.env.PTS_RAW_TEST] : [`\\\\.\\PhysicalDrive${Number(number)}`, `\\\\?\\GLOBALROOT\\Device\\Harddisk${Number(number)}\\Partition0`];
-  for (const p of paths) {
-    try { fd = fs.openSync(p, 'r+'); break; } catch (err) { errors.push(`${p}: ${errText(err)}`); }
+  // 1. Wipe
+  tell('wipe', 0);
+  if (!testFile) {
+    const w = await diskpart([`select disk ${n}`, 'clean']);
+    if (!w.ok) { job = null; return { ok: false, error: 'Windows wouldn’t wipe the card (is it write-protected? check the lock switch).', details: w.out.slice(-600) }; }
+    res.wiped = true;
   }
-  const pause = () => new Promise((r) => setImmediate(r));
-  const fh = {
-    read: async (b, o, l, pos) => { await pause(); return { bytesRead: fs.readSync(fd, b, o, l, pos) }; },
-    write: async (b, o, l, pos) => { await pause(); return { bytesWritten: fs.writeSync(fd, b, o, l, pos) }; },
-    sync: async () => fs.fsyncSync(fd),
-    close: async () => fs.closeSync(fd)
-  };
-  if (fd == null) { job = null; const e = { ok: false, error: 'Windows wouldn’t let the app write to the card for the quick check.', details: errors.join('\n') }; return e; }
 
   // First word of every 4 KB block of marker data -> where on the card it was written
   const whereFrom = new Map();
   const probeBuf = Buffer.alloc(4096);
   for (let j = 0; j < SPOTS; j++) {
-    for (let q = 4096; q < BLOCK; q += 4096) { pattern(probeBuf, offsets[j] + q, seed); whereFrom.set(probeBuf.readUInt32LE(0), offsets[j] + q); }
+    for (let q = 0; q < BLOCK; q += 4096) { pattern(probeBuf, offsets[j] + q, seed); whereFrom.set(probeBuf.readUInt32LE(0), offsets[j] + q); }
   }
-  const originals = [];
-  let restored = 0;
-  const res = { ok: true, spots: SPOTS, badSpots: 0, firstBad: null, lastGood: 0 };
-  const marker = (i) => {
-    const b = Buffer.alloc(BLOCK);
-    pattern(b, offsets[i], seed);
-    b.write(`PTS-PROBE ${seed} spot ${i} at ${offsets[i]}`, 0, 'ascii');
-    return b;
-  };
-  // Windows re-attaches the card the moment anything looks at it, which blocks direct
-  // writes; detach it again and retry a few times
-  res.retries = 0;
-  const writeAt = async (buf, o) => {
-    for (let attempt = 0; ; attempt++) {
-      try { await fh.write(buf, 0, buf.length, o); return; } catch (err) {
-        if (!['EPERM', 'EACCES', 'EIO', 'EBADF'].includes(err.code) || attempt >= 6) throw err;
-        res.retries++;
-        for (const l of letters) await fsutilDismount(l);
-        await new Promise((r) => setTimeout(r, 30 * (attempt + 1)));
-      }
-    }
-  };
-
+  const marker = (i) => { const b = Buffer.alloc(BLOCK); pattern(b, offsets[i], seed); return b; };
+  // Windows only accepts writes to a disk through the plain (non-promise) file calls,
+  // so this uses those, pausing between spots to keep the app responsive
+  const pause = () => new Promise((r) => setImmediate(r));
+  let fd = null;
   try {
-    for (const l of letters) await fsutilDismount(l);
-    // 1. Save what's there now
+    const p = testFile || `\\\\.\\PhysicalDrive${n}`;
+    try { fd = fs.openSync(p, 'r+'); } catch (err) { throw new Error(`couldn’t open the card (${errText(err)})`); }
+    // 2. Marker at every spot, then make sure it has really reached the card
     for (let i = 0; i < SPOTS; i++) {
-      const b = Buffer.alloc(BLOCK);
-      await fh.read(b, 0, BLOCK, offsets[i]);
-      originals.push(b);
-      tell('save', i + 1);
+      await pause();
+      fs.writeSync(fd, marker(i), 0, BLOCK, offsets[i]);
+      map[i] = 'w';
+      tell('write', i + 2);
     }
-    // 2. Write a marker at every spot, then make sure it has really reached the card
-    for (let i = 0; i < SPOTS; i++) { await writeAt(marker(i), offsets[i]); map[i] = 'w'; tell('write', SPOTS + i + 1); }
-    await fh.sync();
+    fs.fsyncSync(fd);
     // 3. Read every marker back
     const got = Buffer.alloc(BLOCK);
     for (let i = 0; i < SPOTS; i++) {
+      await pause();
       let ok = false;
-      try { const r = await fh.read(got, 0, BLOCK, offsets[i]); ok = r.bytesRead === BLOCK && got.equals(marker(i)); } catch { ok = false; }
-      // A marker from another spot here means the card wraps round: its real size is the gap
+      try { ok = fs.readSync(fd, got, 0, BLOCK, offsets[i]) === BLOCK && got.equals(marker(i)); } catch { ok = false; }
       if (!ok) {
-        // Each 4 KB of marker data is unique to where it was written, so look up where
-        // the data now sitting here was meant to go
-        for (let k = 4096; k < BLOCK; k += 4096 * 8) {
+        // Each 4 KB of marker data is unique to where it was written: if data meant for
+        // further up turned up here, the card wraps round and its real size is the gap
+        for (let k = 0; k < BLOCK; k += 4096 * 8) {
           const from = whereFrom.get(got.readUInt32LE(k));
           if (from != null && from > offsets[i] + k) res.wrap = Math.min(res.wrap || Infinity, from - (offsets[i] + k));
         }
-      }
+        res.badSpots++;
+        if (res.firstBad == null) res.firstBad = offsets[i];
+      } else if (res.firstBad == null) res.lastGood = offsets[i] + BLOCK;
       map[i] = ok ? 'g' : 'b';
-      if (ok) { if (res.firstBad == null) res.lastGood = offsets[i] + BLOCK; } else { res.badSpots++; if (res.firstBad == null) res.firstBad = offsets[i]; }
-      tell('check', SPOTS * 2 + i + 1);
+      tell('check', SPOTS + i + 2);
     }
-    // 4. Most fakes ignore the top address bits, so writing high up really lands lower down
-    //    by a power of two. Read those lower places (read only) to see if a marker turned up.
+    // 4. Most fakes ignore the top address bits, so data written high up really lands lower
+    //    down by a power of two. Read those lower places to see if a marker turned up there.
     const small = Buffer.alloc(4096);
     for (let period = 16 * MB; period < size; period *= 2) {
+      await pause();
       for (let j = 0; j < SPOTS; j++) {
         const pos = offsets[j] + 4096 - period;
         if (pos < 0) continue;
         try {
-          await fh.read(small, 0, 4096, pos);
+          fs.readSync(fd, small, 0, 4096, pos);
           if (whereFrom.get(small.readUInt32LE(0)) === offsets[j] + 4096) {
             res.wrap = Math.min(res.wrap || Infinity, period);
             if (map[j] !== 'b') { map[j] = 'b'; res.badSpots++; if (res.firstBad == null || offsets[j] < res.firstBad) res.firstBad = offsets[j]; }
@@ -570,22 +562,21 @@ async function probe(_checksDir, { number, sizeBytes, volumes }, send) {
     }
   } catch (err) {
     res.ok = false;
-    res.error = `The quick check couldn’t finish (${errText(err)}).`;
+    res.error = `The quick check couldn’t finish: ${err.message || errText(err)}.`;
   } finally {
-    // 4. Put the original data back
-    const restoreErrors = [];
-    for (let i = 0; i < originals.length; i++) {
-      try { await writeAt(originals[i], offsets[i]); restored++; } catch (err) { restoreErrors.push(`spot ${i}: ${errText(err)}`); }
-    }
-    if (restoreErrors.length) res.details = `retries=${res.retries}\n` + restoreErrors.slice(0, 10).join('\n');
-    await fh.sync().catch(() => {});
-    await fh.close().catch(() => {});
+    if (fd != null) { try { fs.closeSync(fd); } catch { /* ignore */ } }
     job = null;
-    // Let Windows mount the card again
-    for (const l of letters) await fs.promises.readdir(`${l}:\\`).catch(() => {});
   }
-  res.restored = `${restored}/${originals.length}`;
-  if (restored < originals.length) res.warning = 'Some test spots couldn’t be put back. Format the card before it’s sold.';
+
+  // 4. Format it again so it's ready to use
+  if (!testFile) {
+    tell('format', SPOTS * 2 + 1);
+    const fsType = size <= 32 * 1e9 ? 'fat32' : 'exfat';
+    const f = await diskpart([`select disk ${n}`, 'clean', 'create partition primary', `format fs=${fsType} quick`, 'assign']);
+    res.formatted = f.ok;
+    res.fsType = fsType.toUpperCase();
+    if (!f.ok) { res.warning = 'The card couldn’t be formatted again. Format it in Windows before it’s sold.'; res.details = f.out.slice(-600); }
+  }
   res.realBytes = res.wrap ? res.wrap : res.firstBad != null ? res.lastGood : size;
   delete res.wrap;
   res.map = map.join('');
