@@ -1,0 +1,40 @@
+name: Diagnose
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run dist:folder
+      - name: Compare with v0.1.14 and test raw disk access
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.1.14 -p "PassTheSpecs-win-folder.zip" -D old -R ${{ github.repository }}
+          Expand-Archive old/PassTheSpecs-win-folder.zip -DestinationPath old/x
+          $new = "release/win-unpacked"
+          $same = 0; $diff = @()
+          Get-ChildItem old/x -Recurse -File | Where-Object { $_.Extension -in '.exe','.dll','.node' } | ForEach-Object {
+            $rel = $_.FullName.Substring((Resolve-Path old/x).Path.Length + 1)
+            $n = Join-Path $new $rel
+            if ((Test-Path $n) -and ((Get-FileHash $_.FullName).Hash -eq (Get-FileHash $n).Hash)) { $same++ } else { $diff += $rel }
+          }
+          Write-Output "::notice title=binaries::same=$same diff=$($diff -join ',')"
+          $oldExe = [IO.File]::ReadAllBytes((Resolve-Path old/x/PassTheSpecs.exe))
+          $newExe = [IO.File]::ReadAllBytes((Resolve-Path "$new/PassTheSpecs.exe"))
+          $count = 0; $first = -1
+          for ($i = 0; $i -lt [Math]::Min($oldExe.Length, $newExe.Length); $i++) { if ($oldExe[$i] -ne $newExe[$i]) { $count++; if ($first -lt 0) { $first = $i } } }
+          $txt = [Text.Encoding]::Unicode.GetString($newExe)
+          $integ = $txt.Contains('Integrity') -or [Text.Encoding]::ASCII.GetString($newExe).Contains('ElectronAsarIntegrity')
+          Write-Output "::notice title=exe::oldLen=$($oldExe.Length) newLen=$($newExe.Length) bytesDiffer=$count firstAt=$first integrity=$integ"
+          node -e "const fs=require('fs');const p='\\\\.\\PhysicalDrive0';const out=[];for(const f of ['r','rs']){try{const fd=fs.openSync(p,f);const b=Buffer.alloc(1048576);const n=fs.readSync(fd,b,0,b.length,0);out.push(f+':ok '+n);fs.closeSync(fd)}catch(e){out.push(f+':'+e.code+' '+e.message)}};fs.promises.open(p,'r').then(async h=>{const b=Buffer.alloc(1048576);const r=await h.read(b,0,b.length,4096);out.push('promises:ok '+r.bytesRead);await h.close()}).catch(e=>out.push('promises:'+e.code+' '+e.message)).finally(()=>console.log('::notice title=node::'+out.join(' | ')))"
+          $lang = $ExecutionContext.SessionState.LanguageMode
+          Write-Output "::notice title=lang::$lang"
