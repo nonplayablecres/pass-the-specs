@@ -508,14 +508,20 @@ async function probe(_checksDir, { number, sizeBytes, volumes }, send) {
     b.write(`PTS-PROBE ${seed} spot ${i} at ${offsets[i]}`, 0, 'ascii');
     return b;
   };
+  // Windows re-attaches the card the moment anything looks at it, which blocks direct
+  // writes; detach it again and retry a few times
+  res.retries = 0;
   const writeAt = async (buf, o) => {
-    try { await fh.write(buf, 0, buf.length, o); } catch (err) {
-      // Windows may have mounted the card again: dismount and try once more
-      if (!['EPERM', 'EACCES', 'EIO', 'EBADF'].includes(err.code)) throw err;
-      for (const l of letters) await fsutilDismount(l);
-      await fh.write(buf, 0, buf.length, o);
+    for (let attempt = 0; ; attempt++) {
+      try { await fh.write(buf, 0, buf.length, o); return; } catch (err) {
+        if (!['EPERM', 'EACCES', 'EIO', 'EBADF'].includes(err.code) || attempt >= 6) throw err;
+        res.retries++;
+        for (const l of letters) await fsutilDismount(l);
+        await new Promise((r) => setTimeout(r, 30 * (attempt + 1)));
+      }
     }
   };
+
   try {
     for (const l of letters) await fsutilDismount(l);
     // 1. Save what's there now
@@ -567,15 +573,18 @@ async function probe(_checksDir, { number, sizeBytes, volumes }, send) {
     res.error = `The quick check couldn’t finish (${errText(err)}).`;
   } finally {
     // 4. Put the original data back
+    const restoreErrors = [];
     for (let i = 0; i < originals.length; i++) {
-      try { await writeAt(originals[i], offsets[i]); restored++; } catch { /* counted below */ }
+      try { await writeAt(originals[i], offsets[i]); restored++; } catch (err) { restoreErrors.push(`spot ${i}: ${errText(err)}`); }
     }
+    if (restoreErrors.length) res.details = `retries=${res.retries}\n` + restoreErrors.slice(0, 10).join('\n');
     await fh.sync().catch(() => {});
     await fh.close().catch(() => {});
     job = null;
     // Let Windows mount the card again
     for (const l of letters) await fs.promises.readdir(`${l}:\\`).catch(() => {});
   }
+  res.restored = `${restored}/${originals.length}`;
   if (restored < originals.length) res.warning = 'Some test spots couldn’t be put back. Format the card before it’s sold.';
   res.realBytes = res.wrap ? res.wrap : res.firstBad != null ? res.lastGood : size;
   delete res.wrap;
