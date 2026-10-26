@@ -17,7 +17,7 @@
     "start": "npm run build:ui && electron .",
     "dist": "npm run build:ui && electron-builder --win portable --publish never",
     "dist:folder": "npm run build:ui && electron-builder --win dir --publish never",
-    "dist:mac": "npm run build:ui && electron-builder --mac zip --x64 --arm64 --publish never"
+    "dist:mac": "npm run build:ui && electron-builder --mac zip --universal --publish never"
   },
   "dependencies": {
     "adm-zip": "^0.5.16"
