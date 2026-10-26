@@ -1,5 +1,5 @@
 # Builds the app on GitHub's computers whenever you push a version tag (e.g. v0.1.1),
-# then publishes a Release with the exe and the update file.
+# then publishes a Release with the Windows exe, the Mac app and the update file.
 name: Release
 
 on:
@@ -26,3 +26,18 @@ jobs:
             release/PassTheSpecs.exe
             release/pts-ui.zip
           generate_release_notes: true
+
+  build-mac:
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false' # not code-signed (needs a paid Apple developer account)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run dist:mac
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/PassTheSpecs-mac-*.zip

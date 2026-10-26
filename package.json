@@ -17,7 +17,7 @@
     "start": "npm run build:ui && electron .",
     "dist": "npm run build:ui && electron-builder --win portable --publish never",
     "dist:folder": "npm run build:ui && electron-builder --win dir --publish never",
-    "dist:mac": "npm run build:ui && electron-builder --mac zip --publish never"
+    "dist:mac": "npm run build:ui && electron-builder --mac zip --x64 --arm64 --publish never"
   },
   "dependencies": {
     "adm-zip": "^0.5.16"
@@ -56,7 +56,9 @@
     },
     "mac": {
       "target": "zip",
-      "category": "public.app-category.utilities"
+      "category": "public.app-category.utilities",
+      "artifactName": "PassTheSpecs-mac-${arch}.${ext}",
+      "identity": null
     }
   }
 }
