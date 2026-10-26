@@ -166,15 +166,14 @@ ipcMain.handle('pts:save-report', async (_e, { name, text }) => {
   }
 });
 
-// Camera / microphone access, asked once through the system (stops repeated macOS pop-ups)
+// Camera / microphone access status (the page itself makes the one request)
 ipcMain.handle('pts:media-access', async (_e, kind) => {
   const { systemPreferences } = require('electron');
   if (!['camera', 'microphone'].includes(kind)) return { status: 'unknown' };
   try {
     if (process.platform === 'darwin') {
-      const status = systemPreferences.getMediaAccessStatus(kind);
-      if (status === 'not-determined') return { status: (await systemPreferences.askForMediaAccess(kind)) ? 'granted' : 'denied' };
-      return { status };
+      // Status only. Asking here as well as in the page made macOS prompt twice.
+      return { status: systemPreferences.getMediaAccessStatus(kind) };
     }
     if (process.platform === 'win32') return { status: systemPreferences.getMediaAccessStatus(kind) };
   } catch { /* fall through */ }

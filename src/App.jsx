@@ -150,6 +150,8 @@ export default function App() {
       )}
       {screen === 'result' && (
         <Result
+          items={manualItems}
+          results={manual}
           battery={isComputer && scan.info ? scan.info.battery : null}
           rows={rows}
           deviceName={deviceLabel}

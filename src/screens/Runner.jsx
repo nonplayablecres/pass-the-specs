@@ -13,6 +13,7 @@ import Ports from '../tools/Ports.jsx';
 import Card from '../tools/Card.jsx';
 import Mobicode from '../tools/Mobicode.jsx';
 import Fingerprint from '../tools/Fingerprint.jsx';
+import Checklist from '../components/Checklist.jsx';
 
 function Tool({ check, isMac, info, report }) {
   switch (check.tool) {
@@ -128,30 +129,15 @@ export default function Runner({ items, results, setResult, setNote, onFinish, i
             <span className="pixel" style={{ fontSize: 12, color: 'var(--green-text)' }}>ALL CLEAR</span>
             <h1 className="card-title">Checks done</h1>
             <div><button type="button" className="btn primary big" style={{ minWidth: 320 }} onClick={onFinish}><span>SEE RESULT</span><span className="pixel" style={{ fontSize: 14 }}>▶</span></button></div>
+            <div><button type="button" className="btn" style={{ minWidth: 320 }} onClick={() => setListOpen(true)}>☰ ALL CHECKS</button></div>
           </div>
         )}
       </main>
 
       {listOpen && (
-        <div className="checklist-overlay" role="dialog" aria-label="All checks" onClick={() => setListOpen(false)}>
-          <div className="checklist" onClick={(e) => e.stopPropagation()}>
-            <div className="checklist-head">
-              <span className="eyebrow" style={{ color: 'var(--text)' }}>All checks</span>
-              <button type="button" className="link-btn" onClick={() => setListOpen(false)}>Close ✕</button>
-            </div>
-            {items.map((c, i) => {
-              const res = results[c.id];
-              const st = res ? res.status : null;
-              return (
-                <button key={c.id} type="button" className={'checklist-row' + (i === idx ? ' current' : '')} onClick={() => { setIdx(i); setNoteOpen(false); setListOpen(false); }}>
-                  <span className={'cl-mark ' + (st || '')}>{st === 'pass' ? '✓' : st === 'fail' ? '✕' : i === idx ? '●' : ''}</span>
-                  <span style={{ flex: 1, textAlign: 'left' }}>{c.title}</span>
-                  <span className="muted" style={{ fontSize: 12 }}>{st === 'pass' ? 'Passed' : st === 'fail' ? 'Failed' : 'To do'}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <Checklist items={items} results={results} currentId={check ? check.id : null}
+          onPick={(id) => { setIdx(items.findIndex((c) => c.id === id)); setNoteOpen(false); setListOpen(false); }}
+          onClose={() => setListOpen(false)} />
       )}
     </>
   );

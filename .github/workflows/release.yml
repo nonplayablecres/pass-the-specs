@@ -57,7 +57,10 @@ jobs:
               -c.mac.entitlements=build/entitlements.mac.plist -c.mac.entitlementsInherit=build/entitlements.mac.plist
           else
             echo "No Apple certificate set up: self-signed build"
-            CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac zip --universal --publish never -c.mac.identity=-
+            # Hardened runtime is only for Apple-signed builds. On a self-signed app it
+            # stops the helper processes using the mic/camera, so macOS keeps asking.
+            CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac zip --universal --publish never -c.mac.identity=- \
+              -c.mac.hardenedRuntime=false
           fi
       - uses: softprops/action-gh-release@v2
         with:

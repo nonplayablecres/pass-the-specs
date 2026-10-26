@@ -3,6 +3,7 @@ import JsBarcode from 'jsbarcode';
 import { formatTime } from '../components/Header.jsx';
 import { bridge } from '../lib/bridge.js';
 import Battery from '../components/Battery.jsx';
+import Checklist from '../components/Checklist.jsx';
 
 function Barcode({ value }) {
   const ref = useRef(null);
@@ -54,8 +55,9 @@ function ListingPanel({ lookup, title, boxId, setBoxId, chosen }) {
 }
 
 // rows: every check with { id, title, status, detail, note, auto }
-export default function Result({ onRetest, battery, rows, deviceName, listingName, specDiff, title, boxId, setBoxId, lookup, elapsed, version, onBack, onNew, onReset, resetAt, reportName, onReportText, copy }) {
+export default function Result({ items, results, onRetest, battery, rows, deviceName, listingName, specDiff, title, boxId, setBoxId, lookup, elapsed, version, onBack, onNew, onReset, resetAt, reportName, onReportText, copy }) {
   const [copied, setCopied] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
   const [saved, setSaved] = useState(null);
   const [battReport, setBattReport] = useState(null);
 
@@ -188,9 +190,11 @@ export default function Result({ onRetest, battery, rows, deviceName, listingNam
             </button>
           )}
           <button type="button" className="btn" onClick={onBack}>← BACK TO CHECKS</button>
+          {items && <button type="button" className="btn" onClick={() => setListOpen(true)}>☰ ALL CHECKS</button>}
           <button type="button" className="btn" onClick={onNew}>NEXT TEST ▶</button>
         </aside>
       </main>
+      {listOpen && <Checklist items={items} results={results} onPick={(id) => { setListOpen(false); onRetest(id); }} onClose={() => setListOpen(false)} />}
     </>
   );
 }

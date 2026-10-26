@@ -1,13 +1,9 @@
-import { bridge } from './bridge.js';
-
 // Asks for camera / microphone access ONCE and opens the stream.
 // Never retries by itself: a refused request shows a message with a Try again button,
 // so macOS doesn't keep popping up the permission box.
+// The request goes straight through Chromium (one macOS prompt). The engine is
+// not asked separately any more: asking twice gave two prompts on unsigned Macs.
 export async function openMedia(kind, constraints) {
-  const access = await bridge.mediaAccess(kind);
-  if (access.status === 'denied' || access.status === 'restricted') {
-    throw new Error('blocked');
-  }
   try {
     return await navigator.mediaDevices.getUserMedia(constraints);
   } catch (err) {
