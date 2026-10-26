@@ -94,7 +94,8 @@ function createWindow() {
   });
 
   // Allow camera, microphone and full screen (needed for the hardware tests).
-  const allowed = ['media', 'fullscreen', 'clipboard-sanitized-write'];
+  // window-management: lets the monitor test go full screen on a chosen screen
+  const allowed = ['media', 'fullscreen', 'clipboard-sanitized-write', 'window-management', 'window-placement'];
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(allowed.includes(permission)));
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowed.includes(permission));
 
@@ -144,6 +145,17 @@ ipcMain.handle('pts:cex-search', async (_e, query) => {
     return { ok: false, error: err.message };
   }
 });
+
+// Drive tester (see drives.js). Progress is sent back while a scan / speed test runs.
+const drives = require('./drives');
+ipcMain.handle('pts:drives', async () => drives.listDrives(checksFolder()));
+ipcMain.handle('pts:drive-scan', async (e, opts) => {
+  try { return await drives.scan(opts || {}, (p) => { if (!e.sender.isDestroyed()) e.sender.send('pts:drive-progress', p); }); } catch (err) { return { ok: false, error: err.message }; }
+});
+ipcMain.handle('pts:drive-speed', async (e, opts) => {
+  try { return await drives.speed(opts || {}, (p) => { if (!e.sender.isDestroyed()) e.sender.send('pts:drive-progress', p); }); } catch (err) { return { ok: false, error: err.message }; }
+});
+ipcMain.handle('pts:drive-stop', async () => drives.stop());
 
 ipcMain.handle('pts:ports', async () => {
   const res = await getPorts(checksFolder());

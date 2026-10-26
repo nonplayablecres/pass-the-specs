@@ -14,10 +14,19 @@ import Card from '../tools/Card.jsx';
 import Mobicode from '../tools/Mobicode.jsx';
 import Fingerprint from '../tools/Fingerprint.jsx';
 import Checklist from '../components/Checklist.jsx';
+import Monitor from '../tools/Monitor.jsx';
+import Media from '../tools/Media.jsx';
+import Mouse from '../tools/Mouse.jsx';
+import Drive from '../tools/Drive.jsx';
 
-function Tool({ check, isMac, info, report }) {
+function Tool({ check, isMac, info, report, model, setModel }) {
   switch (check.tool) {
     case 'keys': return <Keyboard isMac={isMac} />;
+    case 'keysFull': return <Keyboard isMac={isMac} full />;
+    case 'monitor': return <Monitor pages={check.pages} model={model} setModel={setModel} />;
+    case 'media': return <Media />;
+    case 'mouse': return <Mouse />;
+    case 'drive': return <Drive step={check.step} report={report} model={model} setModel={setModel} />;
     case 'screen': return <ScreenTest />;
     case 'speaker': return <Speakers />;
     case 'mic': return <Mic />;
@@ -37,7 +46,7 @@ function Tool({ check, isMac, info, report }) {
 
 // items: the checks that need a person. Anything not applicable was already
 // detected and skipped, so the only answers are Pass or Fail.
-export default function Runner({ items, results, setResult, setNote, onFinish, isMac, info, startAt }) {
+export default function Runner({ items, results, setResult, setNote, onFinish, isMac, info, startAt, model, setModel }) {
   const firstOpen = items.findIndex((c) => !results[c.id]);
   const jump = startAt ? items.findIndex((c) => c.id === startAt) : -1;
   const [idx, setIdx] = useState(jump !== -1 ? jump : firstOpen === -1 ? items.length : firstOpen);
@@ -71,7 +80,7 @@ export default function Runner({ items, results, setResult, setNote, onFinish, i
   // Shortcuts: Enter = pass, F = fail, Backspace = previous.
   // Turned off on the keyboard test so every key can be tested.
   useEffect(() => {
-    if (!check || check.tool === 'keys') return undefined;
+    if (!check || ['keys', 'keysFull', 'media'].includes(check.tool)) return undefined;
     const onKey = (e) => {
       if (e.target && e.target.tagName === 'INPUT') return;
       if (e.key === 'Enter') { e.preventDefault(); answer('pass'); }
@@ -107,11 +116,11 @@ export default function Runner({ items, results, setResult, setNote, onFinish, i
             </div>
 
             {check.hint && <div className="hint">{check.hint}</div>}
-            <Tool check={check} isMac={isMac} info={info} report={report} />
+            <Tool check={check} isMac={isMac} info={info} report={report} model={model} setModel={setModel} />
 
             <div className="answer">
               <button type="button" className={'a-fail' + (r && r.status === 'fail' ? ' on' : '')} onClick={() => answer('fail')}>FAIL <span className="key">F</span></button>
-              <button type="button" className={'a-pass' + (r && r.status === 'pass' ? ' on' : '')} onClick={() => answer('pass')}>PASS <span className="key">{check.tool === 'keys' ? '' : 'ENTER'}</span></button>
+              <button type="button" className={'a-pass' + (r && r.status === 'pass' ? ' on' : '')} onClick={() => answer('pass')}>PASS <span className="key">{['keys', 'keysFull', 'media'].includes(check.tool) ? '' : 'ENTER'}</span></button>
             </div>
 
             <div className="card-foot">

@@ -59,3 +59,23 @@ export async function findListing(info, deviceType, opts = {}) {
     mock: !!res.mock
   };
 }
+
+// Monitors, drives, headphones etc: find the listing from a model name / code.
+// Exact = listings that contain the model code (the part with numbers in it).
+export async function findByModel(model) {
+  const query = String(model || '').trim();
+  if (!query) return { status: 'none', exact: [], near: [], query };
+  const res = await bridge.cexSearch(query);
+  if (!res || !res.ok) return { status: 'error', error: (res && res.error) || 'Search failed', query };
+  const words = query.split(/\s+/).map(norm).filter(Boolean);
+  const codes = words.filter((w) => /\d/.test(w) && w.length >= 4);
+  const must = codes.length ? codes : words;
+  const exact = res.hits
+    .filter((h) => must.every((w) => norm(h.boxName).includes(w)))
+    .map((h) => {
+      const g = String(h.boxName).match(/(?:[,/]|\s-)\s*([A-C])\s*$/i);
+      return { ...h, grade: g ? g[1].toUpperCase() : '?', label: h.boxName, diffs: [] };
+    })
+    .sort((a, b) => String(a.grade).localeCompare(String(b.grade)));
+  return { status: exact.length ? 'exact' : 'none', exact: exact.slice(0, 9), near: [], query, mock: !!res.mock };
+}

@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 // Asks for camera / microphone access ONCE and opens the stream.
 // Never retries by itself: a refused request shows a message with a Try again button,
 // so macOS doesn't keep popping up the permission box.
@@ -18,3 +20,25 @@ export function accessHelp(kind) {
     ? `${name} access is off. Turn it on in System Settings → Privacy & Security → ${name} → Pass the Specs, then press Try again.`
     : `${name} access is off. Turn it on in Settings → Privacy & security → ${name}, then press Try again.`;
 }
+
+// Live list of sound outputs / microphones / cameras ('audiooutput' | 'audioinput' | 'videoinput').
+// Updates when something is plugged in or out.
+export function useDevices(kind) {
+  const [list, setList] = useState([]);
+  useEffect(() => {
+    const md = navigator.mediaDevices;
+    if (!md || !md.enumerateDevices) return undefined;
+    let alive = true;
+    const load = () => md.enumerateDevices().then((all) => {
+      if (!alive) return;
+      // Skip Windows' duplicate "Default" / "Communications" entries
+      setList(all.filter((d) => d.kind === kind && d.deviceId !== 'communications' && d.deviceId !== 'default'));
+    }).catch(() => {});
+    load();
+    md.addEventListener('devicechange', load);
+    return () => { alive = false; md.removeEventListener('devicechange', load); };
+  }, [kind]);
+  return list;
+}
+
+export const deviceName = (d, i) => (d.label ? d.label.replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)\s*$/i, '') : `Device ${i + 1}`);

@@ -79,6 +79,15 @@ const MOCK_CUSTOM = {
 let mockPoll = 0;
 const hasShell = typeof window !== 'undefined' && !!window.pts;
 
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let mockStop = false;
+const mockProgress = new Set();
+const MOCK_DRIVES = [
+  { number: 0, model: 'KXG60ZNV256G NVMe TOSHIBA 256GB', media: 'SSD', bus: 'NVMe', sizeBytes: 256060514304, health: 'Healthy', boot: true, volumes: [], smart: {} },
+  { number: 1, model: 'Samsung SSD 970 EVO Plus 1TB', serial: 'S4EWNX0R123456', media: 'SSD', bus: 'NVMe', sizeBytes: 1000204886016, health: 'Healthy', boot: false, temp: 38, wear: 3, hours: 4120, readErrors: 0, writeErrors: 0, predictFail: false, smart: {}, volumes: [{ letter: 'E', label: 'Data', fs: 'NTFS', size: 1000202833920, free: 812345678901 }] },
+  { number: 2, model: 'ST1000DM010-2EP102', serial: 'Z9A1B2C3', media: 'HDD', bus: 'SATA', spindle: 7200, sizeBytes: 1000204886016, health: 'Healthy', boot: false, temp: 34, wear: null, hours: 21877, readErrors: 0, writeErrors: 0, predictFail: false, smart: { 5: { raw: 8 }, 197: { raw: 0 }, 198: { raw: 0 }, 9: { raw: 21877 } }, volumes: [{ letter: 'F', label: '', fs: 'NTFS', size: 1000202833920, free: 999000000000 }] }
+];
+
 export const bridge = {
   inShell: hasShell,
   async systemInfo() {
@@ -140,6 +149,41 @@ export const bridge = {
     if (hasShell) return window.pts.factoryReset();
     window.alert('In the real app this opens the Windows "Reset this PC" screen.');
     return { ok: true };
+  },
+  // Drive tester. hasDrives = false on older app copies (needs the new exe / Mac app).
+  get hasDrives() { return !hasShell || !!window.pts.drives; },
+  async drives() {
+    if (hasShell) return window.pts.drives ? window.pts.drives() : { ok: false, error: 'old-app' };
+    await wait(600);
+    return { ok: true, mock: true, drives: MOCK_DRIVES };
+  },
+  async driveScan(opts) {
+    if (hasShell) return window.pts.driveScan(opts);
+    // Pretend scan for the browser preview
+    mockStop = false;
+    const total = opts.mode === 'full' ? 4000 : 2300;
+    const res = { mode: opts.mode, done: 0, total: total * 1048576, badBytes: 0, badSpots: [], slow: 0, blocks: 0, startedAt: Date.now() };
+    for (let i = 1; i <= 20 && !mockStop; i++) {
+      await wait(150);
+      res.done = (res.total * i) / 20; res.blocks = Math.round((total * i) / 20);
+      if (i === 12 && opts.number === 2) { res.badBytes = 196608; res.badSpots = [81234]; res.slow = 3; }
+      mockProgress.forEach((fn) => fn({ ...res, speed: 1850, eta: (20 - i) * 0.15 }));
+    }
+    return { ok: true, ...res, stopped: mockStop, speed: 1850, seconds: 3 };
+  },
+  async driveSpeed(opts) {
+    if (hasShell) return window.pts.driveSpeed(opts);
+    mockProgress.forEach((fn) => fn({ phase: 'read' }));
+    await wait(1200);
+    mockProgress.forEach((fn) => fn({ phase: 'write' }));
+    await wait(900);
+    return opts.number === 2 ? { ok: true, read: 141.2, write: 128.4, notes: [] } : { ok: true, read: 3290.5, write: 2810.2, notes: [] };
+  },
+  async driveStop() { if (hasShell) return window.pts.driveStop(); mockStop = true; return { ok: true }; },
+  onDriveProgress(fn) {
+    if (hasShell) return window.pts.onDriveProgress ? window.pts.onDriveProgress(fn) : () => {};
+    mockProgress.add(fn);
+    return () => mockProgress.delete(fn);
   },
   openUrl(url) { return hasShell ? window.pts.openUrl(url) : window.open(url, '_blank'); },
   reload() { return hasShell ? window.pts.reload() : window.location.reload(); },

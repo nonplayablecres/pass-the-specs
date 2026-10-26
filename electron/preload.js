@@ -16,6 +16,15 @@ contextBridge.exposeInMainWorld('pts', {
   batteryReport: (name) => ipcRenderer.invoke('pts:battery-report', name),
   saveReport: (name, text) => ipcRenderer.invoke('pts:save-report', { name, text }),
   factoryReset: () => ipcRenderer.invoke('pts:factory-reset'),
+  drives: () => ipcRenderer.invoke('pts:drives'),
+  driveScan: (opts) => ipcRenderer.invoke('pts:drive-scan', opts),
+  driveSpeed: (opts) => ipcRenderer.invoke('pts:drive-speed', opts),
+  driveStop: () => ipcRenderer.invoke('pts:drive-stop'),
+  onDriveProgress: (fn) => {
+    const handler = (_e, p) => fn(p);
+    ipcRenderer.on('pts:drive-progress', handler);
+    return () => ipcRenderer.removeListener('pts:drive-progress', handler);
+  },
   onUpdate: (fn) => {
     const handler = (_e, info) => fn(info);
     ipcRenderer.on('pts:update', handler);

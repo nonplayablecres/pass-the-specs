@@ -21,8 +21,10 @@ async function runScript(checksDir, name, timeout) {
   const temp = path.join(os.tmpdir(), 'pts-' + name);
   fs.writeFileSync(temp, source, 'utf8');
   const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', temp], timeout);
-  const start = out.indexOf('{');
-  if (start === -1) throw new Error('Scan returned nothing');
+  // The JSON starts on the first line beginning with { or [
+  const m = out.match(/^\s*[[{]/m);
+  if (!m) throw new Error('Scan returned nothing');
+  const start = m.index + m[0].length - 1;
   return JSON.parse(out.slice(start));
 }
 
@@ -175,4 +177,4 @@ async function getSystemInfo(checksDir) {
   }
 }
 
-module.exports = { getSystemInfo, getPorts, run };
+module.exports = { getSystemInfo, getPorts, run, runScript };

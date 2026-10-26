@@ -32,6 +32,7 @@ function ListingPanel({ lookup, title, boxId, setBoxId, chosen }) {
             <button key={h.boxId} type="button" className={'grade' + (h.boxId === boxId ? ' on' : '')} onClick={() => setBoxId(h.boxId)} aria-pressed={h.boxId === boxId}>
               <span className="pixel" style={{ fontSize: 14 }}>{h.grade}</span>
               {h.colour && new Set(lookup.exact.map((x) => x.colour)).size > 1 && <span style={{ fontSize: 11 }}>{h.colour}</span>}
+              {h.label && new Set(lookup.exact.map((x) => x.label.replace(/(?:[,/]|\s-)\s*[A-C]\s*$/i, ''))).size > 1 && <span style={{ fontSize: 11, textAlign: 'center' }}>{h.label.replace(/(?:[,/]|\s-)\s*[A-C]\s*$/i, '')}</span>}
               <span>{money(h.sell)}</span>
             </button>
           ))}

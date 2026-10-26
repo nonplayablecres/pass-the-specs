@@ -1,8 +1,18 @@
-import { DEVICE_TYPES, checksFor } from '../data/checklists.js';
+import { DEVICE_TYPES, FEATURES, checksFor } from '../data/checklists.js';
 import { SETTINGS, parseListing } from '../lib/autoChecks.js';
 import Battery from '../components/Battery.jsx';
 
-export default function Start({ colour, setColour, scan, detectedType, title, specDiff, device, setDevice, listing, setListing, boxId, setBoxId, counts, onStart }) {
+const MODEL_HINT = {
+  monitor: 'Found automatically when you run the screen tests, or type it',
+  drive: 'Found automatically when you pick the drive, or type it',
+  headphones: 'e.g. Sony WH-1000XM4',
+  microphone: 'e.g. Blue Yeti',
+  peripherals: 'e.g. Logitech G502',
+  console: 'e.g. PlayStation 5 Disc',
+  controller: 'e.g. DualSense'
+};
+
+export default function Start({ colour, setColour, scan, detectedType, title, specDiff, device, setDevice, features, setFeatures, model, setModel, listing, setListing, boxId, setBoxId, counts, onStart }) {
   const parsed = parseListing(listing);
   const info = scan.info;
   const current = DEVICE_TYPES.find((d) => d.id === device);
@@ -66,6 +76,27 @@ export default function Start({ colour, setColour, scan, detectedType, title, sp
                 </span>
               )}
             </label>
+          </div>
+        )}
+
+        {!isComputer && current && current.ready && (
+          <div>
+            <label className="field">Model (optional, for the CeX listing)
+              <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={MODEL_HINT[device] || 'e.g. the model name on the box or label'} />
+            </label>
+          </div>
+        )}
+
+        {FEATURES[device] && (
+          <div className="field">What does it have?
+            <div className="grades" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}>
+              {FEATURES[device].map((f) => (
+                <button key={f.id} type="button" className={'grade feature' + (features[f.id] ? ' on' : '')} aria-pressed={!!features[f.id]} onClick={() => setFeatures({ ...features, [f.id]: !features[f.id] })}>
+                  <span style={{ fontSize: 14 }}>{features[f.id] ? '✓ ' : ''}{f.name}</span>
+                </button>
+              ))}
+            </div>
+            <span className="muted" style={{ fontSize: 13 }}>Anything not ticked is skipped.</span>
           </div>
         )}
 

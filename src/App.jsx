@@ -4,10 +4,11 @@ import Start from './screens/Start.jsx';
 import Runner from './screens/Runner.jsx';
 import Result from './screens/Result.jsx';
 import Reset from './screens/Reset.jsx';
-import { DEVICE_TYPES, checksFor } from './data/checklists.js';
+import { DEVICE_TYPES, checksFor, defaultFeatures } from './data/checklists.js';
 import { cexTitle, evaluate, machineName, parseListing } from './lib/autoChecks.js';
 import { bridge } from './lib/bridge.js';
-import { findListing } from './lib/listing.js';
+import { findByModel, findListing } from './lib/listing.js';
+import { resetDriveTest } from './tools/Drive.jsx';
 
 // 'diff' = spec differs from the listing: a warning, not a fault
 const DONE = ['pass', 'fail', 'na', 'diff'];
@@ -27,6 +28,10 @@ export default function App() {
   const [boxId, setBoxId] = useState('');
   const [colour, setColour] = useState('');
   const [jumpTo, setJumpTo] = useState(null);
+  // Non-computers: ticked features ("Has a mic") and the model name (typed, or found by the test)
+  const [features, setFeatures] = useState({});
+  const [model, setModel] = useState('');
+  useEffect(() => { setFeatures(defaultFeatures(device)); setModel(''); }, [device]);
   const [manual, setManual] = useState({});
   const [startedAt, setStartedAt] = useState(null);
   const [finishedAt, setFinishedAt] = useState(null);
@@ -57,7 +62,14 @@ export default function App() {
   const isComputer = dev && dev.list === 'computer';
   const checks = checksFor(device);
   const expected = useMemo(() => parseListing(listing), [listing]);
-  const auto = useMemo(() => (isComputer ? evaluate(device, scan.info, expected) : {}), [isComputer, device, scan.info, expected]);
+  const auto = useMemo(() => {
+    if (isComputer) return evaluate(device, scan.info, expected);
+    // Anything needing a feature that isn't ticked is skipped
+    const out = {};
+    checks.forEach((c) => { if (c.needs && !features[c.needs]) out[c.id] = { status: 'na', detail: 'Not on this one' }; });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isComputer, device, scan.info, expected, features]);
 
   const isAuto = (id) => auto[id] && DONE.includes(auto[id].status);
   const manualItems = checks.filter((c) => !c.final && !isAuto(c.id)).map((c) => ({ ...c, hint: auto[c.id] ? auto[c.id].detail : null }));
@@ -69,7 +81,7 @@ export default function App() {
   const autoPass = checks.filter((c) => isAuto(c.id) && auto[c.id].status === 'pass').length;
   const autoFail = checks.filter((c) => isAuto(c.id) && auto[c.id].status === 'fail').length;
   const specDiff = auto.m5 && auto.m5.status === 'diff' ? auto.m5 : null;
-  const title = isComputer ? cexTitle(scan.info, device, { colour }) : '';
+  const title = isComputer ? cexTitle(scan.info, device, { colour }) : model;
 
   const rows = checks.filter((c) => !c.final).map((c) => {
     const a = auto[c.id];
@@ -89,6 +101,19 @@ export default function App() {
 
   // Look the machine up on CeX in the background once the test starts
   useEffect(() => {
+    if (screen === 'start' || isComputer || !model.trim()) return undefined;
+    let cancelled = false;
+    setLookup({ loading: true });
+    const t = setTimeout(() => findByModel(model).then((res) => {
+      if (cancelled) return;
+      setLookup(res);
+      if (res.status === 'exact' && res.exact.length === 1) setBoxId(res.exact[0].boxId);
+    }), 400);
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen === 'start', isComputer, model]);
+
+  useEffect(() => {
     if (screen === 'start' || !isComputer || !scan.info) return;
     let cancelled = false;
     setLookup({ loading: true });
@@ -103,11 +128,11 @@ export default function App() {
 
   const start = () => { setManual({}); setStartedAt(Date.now()); setFinishedAt(null); setScreen('run'); };
   const finish = () => { setFinishedAt((f) => f || Date.now()); setScreen('result'); };
-  const newTest = () => { pickedByHand.current = false; screenRef.current = 'start'; setColour(''); setLookup(null); setResetAt(null); setManual({}); setListing(''); setBoxId(''); setStartedAt(null); setFinishedAt(null); setScreen('start'); runScan(true); };
+  const newTest = () => { resetDriveTest(); pickedByHand.current = false; screenRef.current = 'start'; setColour(''); setModel(''); setFeatures(defaultFeatures(device)); setLookup(null); setResetAt(null); setManual({}); setListing(''); setBoxId(''); setStartedAt(null); setFinishedAt(null); setScreen('start'); runScan(true); };
 
   const deviceLabel = screen === 'start' ? null
     : isComputer && scan.info ? (machineName(scan.info, device) === 'Custom' ? 'Custom PC' : machineName(scan.info, device))
-    : dev ? dev.name : null;
+    : model.trim() ? model.trim() : dev ? dev.name : null;
 
   const headerRight = screen === 'start' ? null : (
     <>
@@ -143,10 +168,10 @@ export default function App() {
       <Header deviceLabel={deviceLabel} startedAt={screen === 'start' ? null : startedAt} finishedAt={finishedAt} right={headerRight} version={appInfo.uiVersion} />
 
       {screen === 'start' && (
-        <Start colour={colour} setColour={setColour} scan={scan} detectedType={detectedType} title={title} specDiff={specDiff} device={device} setDevice={setDevice} listing={listing} setListing={setListing} boxId={boxId} setBoxId={setBoxId} counts={counts} onStart={start} />
+        <Start colour={colour} setColour={setColour} scan={scan} detectedType={detectedType} title={title} specDiff={specDiff} device={device} setDevice={setDevice} features={features} setFeatures={setFeatures} model={model} setModel={setModel} listing={listing} setListing={setListing} boxId={boxId} setBoxId={setBoxId} counts={counts} onStart={start} />
       )}
       {screen === 'run' && (
-        <Runner key={jumpTo || 'run'} startAt={jumpTo} items={manualItems} results={manual} setResult={setResult} setNote={setNote} onFinish={finish} isMac={device === 'mac'} info={isComputer ? scan.info : null} />
+        <Runner key={jumpTo || 'run'} startAt={jumpTo} items={manualItems} results={manual} setResult={setResult} setNote={setNote} onFinish={finish} model={model} setModel={setModel} isMac={device === 'mac'} info={isComputer ? scan.info : null} />
       )}
       {screen === 'result' && (
         <Result
@@ -159,7 +184,7 @@ export default function App() {
           specDiff={specDiff}
           title={title}
           boxId={boxId}
-          lookup={isComputer ? lookup : null}
+          lookup={isComputer || model.trim() ? lookup : null}
           setBoxId={setBoxId}
           elapsed={(finishedAt || Date.now()) - (startedAt || Date.now())}
           version={appInfo.uiVersion}

@@ -112,7 +112,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .tool-top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
 .photo { display: flex; align-items: center; justify-content: center; height: 240px; max-width: 560px; background: var(--panel); border: 1px dashed var(--line-strong); color: var(--muted); font-size: 14px; text-align: center; padding: 16px; }
 .photo img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.kb { display: flex; flex-direction: column; gap: 4px; min-width: 760px; }
+.kb-blocks { display: flex; gap: 14px; align-items: flex-start; }
+.kb { display: flex; flex-direction: column; gap: 4px; }
+.k-gap { min-width: 0; height: 46px; }
+.k-gap.fn { height: 34px; }
 .kb-row { display: flex; gap: 4px; align-items: flex-start; }
 .k { min-width: 0; height: 46px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 5px 7px; font-weight: 700; font-size: 13px; color: var(--text-2); background: var(--bg); border: 1px solid var(--line-strong); }
 .k.fn { height: 34px; }
@@ -276,3 +279,75 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   .label { position: absolute; left: 0; top: 0; }
   .label input { display: none; }
 }
+
+/* Device pickers (speakers, mics, screens) */
+.picker { display: flex; flex-direction: column; gap: 8px; }
+.picker-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.picker-row .btn { min-height: 40px; font-size: 13px; }
+.grade.feature { min-height: 48px; }
+.grade.flash { background: var(--red); border-color: var(--red); color: #fff; }
+
+/* Mic quiet level */
+.quiet { display: inline-flex; flex-direction: column; gap: 4px; padding: 8px 12px; border: 1px solid var(--line-strong); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--muted); }
+.quiet b { font-size: 13px; color: var(--text); letter-spacing: 0; }
+.quiet small { font-size: 12px; letter-spacing: 0; font-weight: 600; }
+.quiet.ok small { color: var(--green-text); }
+.quiet.meh small { color: var(--amber); }
+.quiet.bad small { color: var(--red-text); }
+
+/* Mouse test */
+.mouse-test { position: relative; height: 300px; border: 1px dashed var(--line-strong); background: var(--bg-deep); display: flex; align-items: center; justify-content: center; gap: 48px; overflow: hidden; user-select: none; margin-bottom: 12px; }
+.mouse-svg { width: 130px; height: 206px; }
+.mp { fill: var(--bg); stroke: var(--line-strong); stroke-width: 2; }
+.mp.body { fill: var(--panel); }
+.mp.wheel { fill: var(--panel); }
+.mp.arrow { fill: var(--line-strong); stroke: none; }
+.mp.done { fill: var(--green); stroke: var(--green); }
+.mp.down { fill: var(--red); stroke: var(--red); }
+.mouse-readout { display: flex; flex-direction: column; gap: 8px; min-width: 150px; }
+
+/* Drive test */
+.drive-list { display: flex; flex-direction: column; gap: 4px; }
+.drive-row { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; text-align: left; background: var(--bg); border: 1px solid var(--line-strong); color: var(--text); }
+.drive-row b { font-size: 15px; }
+.drive-row span { font-size: 13px; color: var(--muted); }
+.drive-row.on { border-color: var(--text); box-shadow: inset 4px 0 0 var(--red); }
+.drive-panel { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--line-strong); background: var(--bg-deep); font-size: 14px; }
+.drive-panel.pass { border-color: var(--green); }
+.drive-panel.pass > b.pixel { color: var(--green-text); }
+.drive-panel.fail { border-color: var(--red); }
+.drive-panel.fail > b.pixel { color: var(--red-text); }
+.drive-panel .bad { color: var(--red-text); font-weight: 700; }
+.drive-panel .meh { color: var(--amber); font-weight: 700; }
+.bar.big { position: relative; height: 14px; background: var(--bg); border: 1px solid var(--line-strong); }
+.bar.big > div { height: 100%; background: var(--green); transition: width 0.2s; }
+.bar.big > div.bad { background: var(--red); }
+.bar.big > i { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text); }
+.speed-row { display: grid; grid-template-columns: 60px 1fr 100px 140px; gap: 12px; align-items: center; font-size: 13px; }
+.speed-row > span:first-child { font-weight: 700; letter-spacing: 0.1em; }
+
+/* Monitor test */
+.mt-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--text-2); }
+.mt-stage { position: fixed; inset: 0; z-index: 1000; background: #000; }
+.mt-stage.hide-cursor, .mt-stage.hide-cursor * { cursor: none; }
+.mt-view, .mt-fill { position: absolute; inset: 0; }
+.mt-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.mt-controls { position: absolute; top: 16px; right: 16px; width: min(460px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; background: rgba(17, 17, 19, 0.94); border: 1px solid var(--line-strong); color: var(--text); font-size: 13px; }
+.mt-head { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.mt-head b { flex: 1; }
+.mt-nav { display: flex; gap: 4px; }
+.mt-nav button, .mt-chip { min-height: 32px; padding: 0 10px; background: var(--bg); color: var(--text); border: 1px solid var(--line-strong); font-weight: 700; font-size: 12px; }
+.mt-chip.on { background: var(--text); color: var(--bg); }
+.mt-look { color: var(--text-2); line-height: 1.4; }
+.mt-opts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.mt-opts select { min-height: 32px; background: var(--bg); color: var(--text); border: 1px solid var(--line-strong); font-family: inherit; font-size: 12px; }
+.mt-sep { width: 8px; }
+.mt-slider { display: flex; align-items: center; gap: 8px; width: 100%; }
+.mt-slider input { flex: 1; }
+.mt-rgb { display: inline-flex; gap: 4px; }
+.mt-rgb label { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; }
+.mt-rgb input { width: 52px; min-height: 28px; background: var(--bg); color: var(--text); border: 1px solid var(--line-strong); }
+.mt-tip { font-size: 11px; color: var(--muted); }
+button.badge { background: transparent; font-family: inherit; }
+button.badge.on { background: var(--red); }
+.kb-full .k { font-size: 11px; padding: 4px 5px; overflow: hidden; }
