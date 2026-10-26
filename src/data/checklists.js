@@ -8,7 +8,7 @@
 //   tool    - optional built-in test: photo | keys | keysFull | screen | speaker | mic | camera | touch | trackpad | pad | stress
 //             | ports | card | mobicode | fingerprint | monitor | media | mouse | drive
 //   pages   - monitor tool: which full-screen tests to show
-//   step    - drive tool: health | scan | speed | capacity
+//   step    - drive tool: scan | health | speed | format
 //   final   - done on the last screen (factory reset), not in the click-through
 //
 // Example photos: put a picture at public/examples/<id>.jpg (e.g. public/examples/v1.jpg)
@@ -115,10 +115,10 @@ export const MOUSE_CHECKS = [
 
 // Drive: plug it into this computer (SATA, M.2 slot or a USB adapter)
 export const DRIVE_CHECKS = [
-  { id: 'd1', section: M, title: 'Drive health', how: 'Pick the drive. Reads its own health report: bad sectors, wear, hours and temperature.', tool: 'drive', step: 'health' },
-  { id: 'd2', section: M, title: 'Bad sector scan', how: 'Reads the drive to find unreadable or slow areas. Read-only: nothing on the drive is changed.', tool: 'drive', step: 'scan' },
-  { id: 'd3', section: M, title: 'Speed test', how: 'Read and write speed compared with what this drive should do.', tool: 'drive', step: 'speed' },
-  { id: 'd4', section: M, title: 'Fake capacity check', how: 'SD cards and USB sticks: checks the size it claims is real. The quick check wipes and re-formats the card. Skipped for hard drives and SSDs.', tool: 'drive', step: 'capacity' }
+  { id: 'd2', section: M, title: 'Sector check', how: 'Pick the drive and press Start. Reads it to find unreadable or slow areas. Read-only: nothing on the drive is changed.', tool: 'drive', step: 'scan' },
+  { id: 'd1', section: M, title: 'Health check', how: 'The drive’s own health report: bad sectors, wear, hours and temperature.', tool: 'drive', step: 'health' },
+  { id: 'd3', section: M, title: 'Read / write check', how: 'Press Start. Read and write speed compared with what this drive should do.', tool: 'drive', step: 'speed' },
+  { id: 'd5', section: M, title: 'Format', how: 'Optional: wipes the drive and formats it ready to sell. Not needed? Just press PASS.', tool: 'drive', step: 'format' }
 ];
 
 const LISTS = {

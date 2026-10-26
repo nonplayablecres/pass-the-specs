@@ -21,12 +21,10 @@ jobs:
           (Get-FileHash V:\photo.bin).Hash | Set-Content before.txt
       - run: npx electron scripts/drive-selftest.js V
         timeout-minutes: 5
-        env:
-          PTS_SELFTEST: '1'
-      - name: Card wiped and formatted again
+      - name: Card formatted (FAT32)
         shell: pwsh
         run: |
           $vhd = Get-DiskImage -ImagePath "$env:RUNNER_TEMP\card.vhdx"
           $vols = Get-Disk -Number $vhd.Number | Get-Partition | Get-Volume
           Write-Output "::notice title=after::$($vols | Select-Object DriveLetter,FileSystem,Size,HealthStatus | ConvertTo-Json -Compress)"
-          if (-not ($vols | Where-Object FileSystem)) { exit 1 }
+          if (-not ($vols | Where-Object FileSystem -eq 'FAT32')) { exit 1 }

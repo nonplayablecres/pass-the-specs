@@ -182,34 +182,10 @@ export const bridge = {
     await wait(900);
     return opts.number === 3 ? { ok: true, read: 88.4, write: 41.7, notes: [] } : opts.number === 2 ? { ok: true, read: 141.2, write: 128.4, notes: [] } : { ok: true, read: 3290.5, write: 2810.2, notes: [] };
   },
-  async driveProbe(opts) {
-    if (hasShell) return window.pts.driveProbe ? window.pts.driveProbe(opts) : { ok: false, error: 'Needs the newest app' };
-    const map = new Array(128).fill('.');
-    for (let i = 1; i <= 3; i++) {
-      await wait(400);
-      for (let c = 0; c < 128; c++) map[c] = i === 1 ? '.' : i === 2 ? 'w' : 'g';
-      mockProgress.forEach((fn) => fn({ phase: ['wipe', 'write', 'check'][i - 1], done: i * 128, total: 384, map: map.join('') }));
-    }
-    return { ok: true, spots: 128, badSpots: 0, realBytes: opts.sizeBytes, map: map.join(''), seconds: 4.2, wiped: true, formatted: true, fsType: 'EXFAT' };
-  },
-  async driveCapacity(opts) {
-    if (hasShell) return window.pts.driveCapacity ? window.pts.driveCapacity(opts) : { ok: false, error: 'Needs the newest app' };
-    mockStop = false;
-    const total = 16 * 1e9;
-    const res = { ok: true, phase: 'write', done: 0, total: total * 2, written: 0, verified: 0, badBytes: 0, firstBad: null };
-    for (let i = 1; i <= 30 && !mockStop; i++) {
-      await wait(120);
-      const writing = i <= 15;
-      res.phase = writing ? 'write' : 'verify';
-      res.done = (res.total * i) / 30;
-      res.written = Math.min(total, res.done);
-      const fill = writing ? Math.round((600 * i) / 15) : 600;
-      const checked = writing ? 0 : Math.round((600 * (i - 15)) / 15);
-      res.map = Array.from({ length: 600 }, (_, c) => (c < checked ? (opts.fake && c > 150 ? 'b' : 'g') : c < fill ? 'w' : '.')).join('');
-      mockProgress.forEach((fn) => fn({ ...res, speed: 42, eta: (30 - i) * 0.12 }));
-    }
-    if (opts.fake) { res.badBytes = 12e9; res.firstBad = 4e9; }
-    return { ...res, realBytes: res.firstBad != null ? res.firstBad : res.written, stopped: mockStop, speed: 42 };
+  async driveFormat(opts) {
+    if (hasShell) return window.pts.driveFormat ? window.pts.driveFormat(opts) : { ok: false, error: 'Needs the newest app' };
+    await wait(1500);
+    return { ok: true, fsType: String(opts.fsType || 'exfat').toUpperCase() };
   },
   async driveStop() { if (hasShell) return window.pts.driveStop(); mockStop = true; return { ok: true }; },
   onDriveProgress(fn) {
