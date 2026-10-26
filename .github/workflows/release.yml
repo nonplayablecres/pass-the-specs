@@ -20,10 +20,14 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run dist
+      # Also ship the unpacked folder: starts instantly (the single exe unpacks itself every launch)
+      - run: Compress-Archive -Path "release/win-unpacked/*" -DestinationPath "release/PassTheSpecs-win-folder.zip"
+        shell: pwsh
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             release/PassTheSpecs.exe
+            release/PassTheSpecs-win-folder.zip
             release/pts-ui.zip
           generate_release_notes: true
 

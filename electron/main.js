@@ -2,7 +2,24 @@
 // It opens a window, runs the system scan, and keeps the app up to date.
 // The screens themselves live in /src (React) and are built into /dist.
 
-const { app, BrowserWindow, ipcMain, session, clipboard, shell, Menu, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, session, clipboard, shell, Menu, dialog } = require('electron');
+const os = require('os');
+
+// ---- Crash safety net -------------------------------------------------------
+// If anything goes wrong while starting, write it to a log and show a message
+// instead of silently doing nothing.
+const LOG = require('path').join(os.tmpdir(), 'pass-the-specs-log.txt');
+function log(...parts) {
+  try { require('fs').appendFileSync(LOG, `[${new Date().toISOString()}] ${parts.join(' ')}\n`); } catch { /* ignore */ }
+}
+function fatal(err) {
+  const msg = (err && err.stack) || String(err);
+  log('FATAL', msg);
+  try { dialog.showErrorBox('Pass the Specs could not start', `${msg}\n\nA copy of this is saved in:\n${LOG}`); } catch { /* ignore */ }
+}
+process.on('uncaughtException', fatal);
+process.on('unhandledRejection', fatal);
+log('Starting', process.platform, process.arch, 'exe:', process.execPath);
 const path = require('path');
 const fs = require('fs');
 const pkg = require('../package.json');
@@ -87,6 +104,8 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => log('Page failed to load', code, desc, url));
+  win.webContents.on('render-process-gone', (_e, d) => log('Screen process stopped', JSON.stringify(d)));
   loadUi();
   win.webContents.once('did-finish-load', () => { if (!isDev) runUpdateCheck(); });
 }
@@ -128,6 +147,8 @@ ipcMain.handle('pts:cex-search', async (_e, query) => {
 
 ipcMain.handle('pts:ports', async () => {
   const res = await getPorts(checksFolder());
+  // 'screen' can only be loaded once the app has started, so it's required here
+  const { screen } = require('electron');
   return { ...res, displays: screen.getAllDisplays().length };
 });
 
@@ -163,5 +184,8 @@ ipcMain.handle('pts:factory-reset', async () => {
   }
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  log('Ready, opening window');
+  try { createWindow(); } catch (err) { fatal(err); }
+}).catch(fatal);
 app.on('window-all-closed', () => app.quit());
