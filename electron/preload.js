@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('pts', {
   driveSpeed: (opts) => ipcRenderer.invoke('pts:drive-speed', opts),
   driveStop: () => ipcRenderer.invoke('pts:drive-stop'),
   driveCapacity: (opts) => ipcRenderer.invoke('pts:drive-capacity', opts),
+  driveProbe: (opts) => ipcRenderer.invoke('pts:drive-probe', opts),
   onDriveProgress: (fn) => {
     const handler = (_e, p) => fn(p);
     ipcRenderer.on('pts:drive-progress', handler);

@@ -146,5 +146,8 @@ export function judgeSpeed(d, res) {
 export function driveModel(d) {
   const words = String(d.model || '').replace(/\b(ssd|nvme|ata|scsi|disk|device|usb|series|generic|storage|reader|flash|sd\/mmc|multi-card)\b/gi, ' ').replace(/\s+/g, ' ').trim();
   const size = sizeLabel(d.sizeBytes);
-  return words.toLowerCase().includes(size.toLowerCase()) ? words : `${words} ${size}`;
+  const clean = words.replace(/^[\s\-_/.,]+|[\s\-_/.,]+$/g, '');
+  // Card readers and cheap sticks have no real name: call it what it is
+  const name = /[a-z0-9]{2,}/i.test(clean) ? clean : KIND_NAME[driveKind(d)];
+  return name.toLowerCase().includes(size.toLowerCase()) ? name : `${name} ${size}`;
 }

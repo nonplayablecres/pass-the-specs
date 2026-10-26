@@ -12,5 +12,20 @@ jobs:
         with:
           node-version: 20
       - run: npm install
-      - run: npx electron scripts/drive-selftest.js
+      - name: Make a 1 GB virtual card (V:) with a file on it
+        shell: pwsh
+        run: |
+          "create vdisk file=`"$env:RUNNER_TEMP\card.vhdx`" maximum=1024 type=expandable`nattach vdisk`ncreate partition primary`nformat fs=exfat quick label=CARD`nassign letter=V" | Set-Content dp.txt
+          diskpart /s dp.txt
+          $bytes = New-Object byte[] (20MB); (New-Object Random 42).NextBytes($bytes); [IO.File]::WriteAllBytes('V:\photo.bin', $bytes)
+          (Get-FileHash V:\photo.bin).Hash | Set-Content before.txt
+      - run: npx electron scripts/drive-selftest.js V
         timeout-minutes: 5
+      - name: File on the card unchanged and file system clean
+        shell: pwsh
+        run: |
+          $same = (Get-FileHash V:\photo.bin).Hash -eq (Get-Content before.txt)
+          $chk = chkdsk V: 2>&1 | Out-String
+          $clean = $chk -match 'found no problems|no further action'
+          Write-Output "::notice title=after::file unchanged=$same, chkdsk clean=$clean, leftovers=$((Get-ChildItem V:\ -Force | Select-Object -ExpandProperty Name) -join ',')"
+          if (-not $same) { exit 1 }

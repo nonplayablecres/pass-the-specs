@@ -118,7 +118,7 @@ export const DRIVE_CHECKS = [
   { id: 'd1', section: M, title: 'Drive health', how: 'Pick the drive. Reads its own health report: bad sectors, wear, hours and temperature.', tool: 'drive', step: 'health' },
   { id: 'd2', section: M, title: 'Bad sector scan', how: 'Reads the drive to find unreadable or slow areas. Read-only: nothing on the drive is changed.', tool: 'drive', step: 'scan' },
   { id: 'd3', section: M, title: 'Speed test', how: 'Read and write speed compared with what this drive should do.', tool: 'drive', step: 'speed' },
-  { id: 'd4', section: M, title: 'Fake capacity check', how: 'SD cards and USB sticks: checks every gigabyte it claims to have is real. Skipped for hard drives and SSDs.', tool: 'drive', step: 'capacity' }
+  { id: 'd4', section: M, title: 'Fake capacity check', how: 'SD cards and USB sticks: checks the size it claims is real. Quick check runs by itself in seconds. Skipped for hard drives and SSDs.', tool: 'drive', step: 'capacity' }
 ];
 
 const LISTS = {

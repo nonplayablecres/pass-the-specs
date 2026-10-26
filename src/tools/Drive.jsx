@@ -82,10 +82,10 @@ function Details({ text }) {
 // The whole drive as a grid of squares, start (top left) to end (bottom right):
 // grey = not read yet, green = reads fine, amber = slow (weak), red = unreadable
 const SCAN_KEY = [['g', 'Good'], ['s', 'Slow'], ['b', 'Bad'], ['.', 'Not read']];
-function SectorMap({ map, legend = SCAN_KEY }) {
+function SectorMap({ map, legend = SCAN_KEY, columns = 40 }) {
   return (
     <div className="sector-wrap">
-      <div className="sector-map" role="img" aria-label={`Sector map: ${(map.match(/b/g) || []).length} bad areas, ${(map.match(/s/g) || []).length} slow areas`}>
+      <div className="sector-map" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }} role="img" aria-label={`Sector map: ${(map.match(/b/g) || []).length} bad areas, ${(map.match(/s/g) || []).length} slow areas`}>
         {map.split('').map((c, i) => <i key={i} className={'sc ' + c} />)}
       </div>
       <div className="sector-key">
@@ -103,7 +103,7 @@ function Scan({ d, report }) {
   const p = busy ? s.progress : null;
   const run = async (mode) => {
     setState({ running: 'scan', progress: null, scan: null });
-    const out = await bridge.driveScan({ number: d.number, mode, sizeBytes: d.sizeBytes, media: d.media, volumes: d.volumes });
+    const out = await bridge.driveScan({ number: d.number, mode, sizeBytes: d.sizeBytes, media: d.media, volumes: d.volumes, flash: isFlash(d) });
     setState({ running: '', progress: null, scan: { ...out, number: d.number } });
     if (out.ok && !out.stopped) {
       const bad = out.badBytes > 0;
@@ -119,7 +119,7 @@ function Scan({ d, report }) {
         <button type="button" className="btn primary" disabled={busy} onClick={() => run('quick')}>{res ? '↻ QUICK SCAN' : '▶ QUICK SCAN'}</button>
         <button type="button" className="btn" disabled={busy} onClick={() => run('full')}>▶ FULL SCAN</button>
         {busy && <button type="button" className="btn" onClick={() => bridge.driveStop()}>■ Stop</button>}
-        <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>Quick: under a minute, checks spots across the whole drive. Full: reads every sector{d.sizeBytes ? `, roughly ${dur(d.sizeBytes / 1e6 / (expectedSpeed(d).hdd ? 140 : expectedSpeed(d).flash ? 60 : 1500))}` : ''}.</span>
+        <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>Quick: {isFlash(d) ? 'about 10 seconds' : 'under a minute'}, checks spots across the whole drive. Full: reads every sector{d.sizeBytes ? `, roughly ${dur(d.sizeBytes / 1e6 / (expectedSpeed(d).hdd ? 140 : expectedSpeed(d).flash ? 60 : 1500))}` : ''}.</span>
       </div>
       {busy && !p && <div className="hint"><span className="dot wait" style={{ display: 'inline-block' }} /> Opening the drive…</div>}
       {(p || res) && (() => {
@@ -194,7 +194,9 @@ function Speed({ d, report }) {
   );
 }
 
-// Fake capacity check: fills the free space with test data and reads it all back
+// Fake capacity check. Quick (starts by itself, seconds): checks 128 spots across the size
+// the card claims, putting the original data back. Full (button): fills the free space with
+// test data and reads every byte back.
 function Capacity({ d, report }) {
   const s = useDriveState();
   const flash = isFlash(d);
@@ -202,46 +204,63 @@ function Capacity({ d, report }) {
   const busy = s.running === 'cap';
   const p = busy ? s.progress : null;
   const vol = (d.volumes || []).slice().sort((a, b) => (b.free || 0) - (a.free || 0))[0];
-  // Not a card or stick: nothing to do here
-  useEffect(() => { if (!flash) report('na', 'Only needed for SD cards and USB sticks', { advance: true }); }, [d.number]); // eslint-disable-line react-hooks/exhaustive-deps
+  const claimed = sizeLabel(d.sizeBytes);
+  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
+
+  const finish = (out, kind) => {
+    setState({ running: '', progress: null, cap: { ...out, kind, number: d.number } });
+    if (!out.ok || out.stopped) return;
+    const fake = kind === 'quick' ? out.badSpots > 0 : out.badBytes > 0 || !!out.note;
+    const real = `${(out.realBytes / 1e9).toFixed(1)} GB`;
+    report(fake ? 'fail' : 'pass', fake ? `Fake capacity: says ${claimed}, only about ${real} really works` : kind === 'quick' ? `Real ${claimed} (quick check, 128 spots)` : `All ${(out.written / 1e9).toFixed(1)} GB of free space checked and real`);
+  };
+  const quick = async () => {
+    setState({ running: 'cap', progress: null, cap: null });
+    finish(await bridge.driveProbe({ number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes }), 'quick');
+  };
+  const full = async () => {
+    setState({ running: 'cap', progress: null, cap: null });
+    finish(await bridge.driveCapacity({ volumes: d.volumes }), 'full');
+  };
+  useEffect(() => {
+    if (!flash) report('na', 'Only needed for SD cards and USB sticks', { advance: true });
+    else if (!res && !state.running && !isMac) quick();
+  }, [d.number]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!flash) return <div className="hint">Only needed for SD cards and USB sticks. Skipped.</div>;
 
   const sp = s.speed && s.speed.number === d.number ? s.speed : null;
   const est = vol ? vol.free / 1e6 / Math.max(5, (sp && sp.write) || 15) + vol.free / 1e6 / Math.max(10, (sp && sp.read) || 40) : null;
-  const run = async () => {
-    setState({ running: 'cap', progress: null, cap: null });
-    const out = await bridge.driveCapacity({ volumes: d.volumes });
-    setState({ running: '', progress: null, cap: { ...out, number: d.number } });
-    if (out.ok && !out.stopped) {
-      const fake = out.badBytes > 0 || !!out.note;
-      report(fake ? 'fail' : 'pass', fake ? `Fake capacity: only about ${(out.realBytes / 1e9).toFixed(1)} GB really works` : `All ${(out.written / 1e9).toFixed(1)} GB of free space checked and real`);
-    }
-  };
   const r = p || res;
-  const pct = r && r.total ? Math.min(100, (r.done / r.total) * 100) : 0;
-  const fake = r && !busy && (r.badBytes > 0 || r.note);
+  const kind = busy ? (p && ['save', 'write', 'check'].includes(p.phase) ? 'quick' : 'full') : res && res.kind;
+  const pct = !busy && res && !res.stopped && !res.error ? 100 : r && r.total ? Math.min(100, (r.done / r.total) * 100) : 0;
+  const fake = r && !busy && (kind === 'quick' ? r.badSpots > 0 : r.badBytes > 0 || r.note);
+  const PHASE = { save: 'Saving', write: 'Marking', check: 'Checking', verify: 'Checking' };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="tool-row">
-        <button type="button" className="btn primary" disabled={busy || !vol} onClick={run}>{res ? '↻ CHECK AGAIN' : '▶ START CHECK'}</button>
-        {busy && <button type="button" className="btn" onClick={() => bridge.driveStop()}>■ Stop</button>}
+        {!isMac && <button type="button" className="btn primary" disabled={busy} onClick={quick}>{res && res.kind === 'quick' ? '↻ QUICK CHECK' : '▶ QUICK CHECK'}</button>}
+        <button type="button" className="btn" disabled={busy || !vol} onClick={full}>▶ FULL CHECK</button>
+        {busy && kind === 'full' && <button type="button" className="btn" onClick={() => bridge.driveStop()}>■ Stop</button>}
         <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>
-          {vol ? `Fills the ${sizeLabel(vol.free)} of free space with test data, reads it all back, then deletes it. Files already on it aren’t touched.${est ? ` About ${dur(est)}.` : ''}` : 'Needs a formatted partition. Format the card, then press Refresh.'}
+          {!isMac && 'Quick: a few seconds, tests 128 spots across the card. '}
+          {vol ? `Full: writes and reads back all ${sizeLabel(vol.free)} of free space${est ? `, about ${dur(est)}` : ''}.` : 'Full: needs a formatted card.'}
         </span>
       </div>
-      {r && (
+      {busy && !p && <div className="hint"><span className="dot wait" style={{ display: 'inline-block' }} /> Starting…</div>}
+      {r && (p || res) && (
         <div className={'drive-panel ' + (busy ? '' : r.error ? 'fail' : fake ? 'fail' : r.stopped ? '' : 'pass')}>
-          {r.error ? <span className="bad">{r.error}</span> : (
+          {r.error ? <><span className="bad">{r.error}</span><Details text={r.details} /></> : (
             <>
-              {r.map && <SectorMap map={r.map} legend={[['w', 'Written'], ['g', 'Checked: real'], ['b', 'Checked: fake / lost'], ['.', 'Not yet']]} />}
+              {r.map && <SectorMap map={r.map} columns={kind === 'quick' ? 32 : 40} legend={kind === 'quick' ? [['w', 'Marked'], ['g', 'Real'], ['b', 'Fake / lost'], ['.', 'Not yet']] : [['w', 'Written'], ['g', 'Checked: real'], ['b', 'Checked: fake / lost'], ['.', 'Not yet']]} />}
               <div className="bar big"><div style={{ width: `${pct}%` }} /></div>
               <span>
                 <b className="pixel" style={{ fontSize: 11 }}>{Math.floor(pct)}%</b>
-                {' · '}{r.phase === 'write' ? 'Writing' : 'Checking'} · {mbs(r.speed)}{busy && r.eta != null ? ` · ${dur(r.eta)} left` : ''}{!busy && r.stopped ? ' · stopped' : ''}
+                {busy && r.phase ? ` · ${PHASE[r.phase] || ''}` : ''}{kind === 'full' && r.speed ? ` · ${mbs(r.speed)}` : ''}{busy && r.eta != null ? ` · ${dur(r.eta)} left` : ''}{!busy && r.stopped ? ' · stopped' : ''}
               </span>
               {!busy && !r.stopped && (fake
-                ? <span className="bad">✕ FAKE CAPACITY: only about {(r.realBytes / 1e9).toFixed(1)} GB really works{r.note ? `. ${r.note}` : ''}</span>
-                : <span>✓ All {(r.written / 1e9).toFixed(1)} GB checked: real capacity</span>)}
+                ? <span className="bad">✕ FAKE CAPACITY: says {claimed}, only about {(r.realBytes / 1e9).toFixed(1)} GB really works{r.note ? `. ${r.note}` : ''}</span>
+                : <span>✓ Real {claimed}{kind === 'quick' ? ' (all 128 spots held their data)' : `: all ${(r.written / 1e9).toFixed(1)} GB checked`}</span>)}
+              {!busy && r.warning && <span className="meh">! {r.warning}</span>}
               {!busy && r.cached && <span className="muted">Windows may have kept some test data in memory, so small fakes could slip through.</span>}
             </>
           )}

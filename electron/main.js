@@ -155,6 +155,9 @@ ipcMain.handle('pts:drive-scan', async (e, opts) => {
 ipcMain.handle('pts:drive-speed', async (e, opts) => {
   try { return await drives.speed(checksFolder(), opts || {}, (p) => { if (!e.sender.isDestroyed()) e.sender.send('pts:drive-progress', p); }); } catch (err) { return { ok: false, error: err.message }; }
 });
+ipcMain.handle('pts:drive-probe', async (e, opts) => {
+  try { return await drives.probe(checksFolder(), opts || {}, (p) => { if (!e.sender.isDestroyed()) e.sender.send('pts:drive-progress', p); }); } catch (err) { return { ok: false, error: err.message }; }
+});
 ipcMain.handle('pts:drive-capacity', async (e, opts) => {
   try { return await drives.capacity(checksFolder(), opts || {}, (p) => { if (!e.sender.isDestroyed()) e.sender.send('pts:drive-progress', p); }); } catch (err) { return { ok: false, error: err.message }; }
 });

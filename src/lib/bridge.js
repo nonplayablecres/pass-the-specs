@@ -182,6 +182,16 @@ export const bridge = {
     await wait(900);
     return opts.number === 3 ? { ok: true, read: 88.4, write: 41.7, notes: [] } : opts.number === 2 ? { ok: true, read: 141.2, write: 128.4, notes: [] } : { ok: true, read: 3290.5, write: 2810.2, notes: [] };
   },
+  async driveProbe(opts) {
+    if (hasShell) return window.pts.driveProbe ? window.pts.driveProbe(opts) : { ok: false, error: 'Needs the newest app' };
+    const map = new Array(128).fill('.');
+    for (let i = 1; i <= 3; i++) {
+      await wait(400);
+      for (let c = 0; c < 128; c++) map[c] = i === 1 ? '.' : i === 2 ? 'w' : 'g';
+      mockProgress.forEach((fn) => fn({ phase: ['save', 'write', 'check'][i - 1], done: i * 128, total: 384, map: map.join('') }));
+    }
+    return { ok: true, spots: 128, badSpots: 0, realBytes: opts.sizeBytes, map: map.join(''), seconds: 4.2 };
+  },
   async driveCapacity(opts) {
     if (hasShell) return window.pts.driveCapacity ? window.pts.driveCapacity(opts) : { ok: false, error: 'Needs the newest app' };
     mockStop = false;
