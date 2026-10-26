@@ -515,7 +515,14 @@ async function probe(checksDir, { number, sizeBytes }, send) {
   let fd = null;
   try {
     const p = testFile || `\\\\.\\PhysicalDrive${n}`;
-    try { fd = fs.openSync(p, 'r+'); } catch (err) { throw new Error(`couldn’t open the card (${errText(err)})`); }
+    // Straight after a wipe Windows is still settling the card, so give it a few tries
+    for (let attempt = 0; fd == null; attempt++) {
+      try { fd = fs.openSync(p, 'r+'); } catch (err) {
+        if (attempt >= 20) throw new Error(`couldn’t open the card (${errText(err)})`);
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+    res.openTries = 0;
     // 2. Marker at every spot, then make sure it has really reached the card
     for (let i = 0; i < SPOTS; i++) {
       await pause();

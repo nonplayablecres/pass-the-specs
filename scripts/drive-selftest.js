@@ -15,12 +15,12 @@ app.whenReady().then(async () => {
     say('scan', JSON.stringify({ ok: scan.ok, error: scan.error, details: scan.details, blocks: scan.blocks, bad: scan.badBytes, speed: Math.round(scan.speed || 0), note: scan.note }));
     const sp = await drives.speed('', { number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes, flash: !!letter }, () => {});
     say('speed', JSON.stringify(sp));
+    const cap = await drives.capacity('', { volumes: d.volumes, limitBytes: 256 * 1024 * 1024 }, () => {});
+    say('capacity', JSON.stringify({ ok: cap.ok, error: cap.error, written: cap.written, bad: cap.badBytes, cached: cap.cached, secs: Math.round(cap.seconds) }));
     if (letter) {
       const pr = await drives.probe(path.join(__dirname, '..', 'public', 'checks'), { number: d.number, sizeBytes: d.sizeBytes, volumes: d.volumes }, () => {});
       say('probe', JSON.stringify({ ok: pr.ok, error: pr.error, details: pr.details, bad: pr.badSpots, real: pr.realBytes, warning: pr.warning, restored: pr.restored, retries: pr.retries, details: pr.details, secs: pr.seconds }));
     }
-    const cap = await drives.capacity('', { volumes: d.volumes, limitBytes: 256 * 1024 * 1024 }, () => {});
-    say('capacity', JSON.stringify({ ok: cap.ok, error: cap.error, written: cap.written, bad: cap.badBytes, cached: cap.cached, secs: Math.round(cap.seconds) }));
   } catch (err) {
     say('error', err.stack);
   }
