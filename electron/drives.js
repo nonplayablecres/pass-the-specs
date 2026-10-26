@@ -476,13 +476,22 @@ async function probe(_checksDir, { number, sizeBytes, volumes }, send) {
   job = { stop: false };
 
   // Open the whole card for reading and writing
-  let fh = null;
+  // Windows only accepts writes to a disk through the plain (non-promise) file calls,
+  // so this uses those, pausing between spots to keep the app responsive
+  let fd = null;
   const errors = [];
   const paths = process.env.PTS_RAW_TEST ? [process.env.PTS_RAW_TEST] : [`\\\\.\\PhysicalDrive${Number(number)}`, `\\\\?\\GLOBALROOT\\Device\\Harddisk${Number(number)}\\Partition0`];
   for (const p of paths) {
-    try { fh = await fs.promises.open(p, 'r+'); break; } catch (err) { errors.push(`${p}: ${errText(err)}`); }
+    try { fd = fs.openSync(p, 'r+'); break; } catch (err) { errors.push(`${p}: ${errText(err)}`); }
   }
-  if (!fh) { job = null; const e = { ok: false, error: 'Windows wouldn’t let the app write to the card for the quick check.', details: errors.join('\n') }; return e; }
+  const pause = () => new Promise((r) => setImmediate(r));
+  const fh = {
+    read: async (b, o, l, pos) => { await pause(); return { bytesRead: fs.readSync(fd, b, o, l, pos) }; },
+    write: async (b, o, l, pos) => { await pause(); return { bytesWritten: fs.writeSync(fd, b, o, l, pos) }; },
+    sync: async () => fs.fsyncSync(fd),
+    close: async () => fs.closeSync(fd)
+  };
+  if (fd == null) { job = null; const e = { ok: false, error: 'Windows wouldn’t let the app write to the card for the quick check.', details: errors.join('\n') }; return e; }
 
   // First word of every 4 KB block of marker data -> where on the card it was written
   const whereFrom = new Map();
@@ -502,7 +511,7 @@ async function probe(_checksDir, { number, sizeBytes, volumes }, send) {
   const writeAt = async (buf, o) => {
     try { await fh.write(buf, 0, buf.length, o); } catch (err) {
       // Windows may have mounted the card again: dismount and try once more
-      if (!['EPERM', 'EACCES', 'EIO'].includes(err.code)) throw err;
+      if (!['EPERM', 'EACCES', 'EIO', 'EBADF'].includes(err.code)) throw err;
       for (const l of letters) await fsutilDismount(l);
       await fh.write(buf, 0, buf.length, o);
     }
