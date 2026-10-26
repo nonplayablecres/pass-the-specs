@@ -4,7 +4,7 @@ import Start from './screens/Start.jsx';
 import Runner from './screens/Runner.jsx';
 import Result from './screens/Result.jsx';
 import Reset from './screens/Reset.jsx';
-import { DEVICE_TYPES, checksFor, defaultFeatures } from './data/checklists.js';
+import { DEVICE_TYPES, checksFor } from './data/checklists.js';
 import { cexTitle, evaluate, machineName, parseListing } from './lib/autoChecks.js';
 import { bridge } from './lib/bridge.js';
 import { findByModel, findListing } from './lib/listing.js';
@@ -28,10 +28,9 @@ export default function App() {
   const [boxId, setBoxId] = useState('');
   const [colour, setColour] = useState('');
   const [jumpTo, setJumpTo] = useState(null);
-  // Non-computers: ticked features ("Has a mic") and the model name (typed, or found by the test)
-  const [features, setFeatures] = useState({});
+  // Non-computers: the model name (typed, or found by the test) for the CeX lookup
   const [model, setModel] = useState('');
-  useEffect(() => { setFeatures(defaultFeatures(device)); setModel(''); }, [device]);
+  useEffect(() => { setModel(''); }, [device]);
   const [manual, setManual] = useState({});
   const [startedAt, setStartedAt] = useState(null);
   const [finishedAt, setFinishedAt] = useState(null);
@@ -62,14 +61,7 @@ export default function App() {
   const isComputer = dev && dev.list === 'computer';
   const checks = checksFor(device);
   const expected = useMemo(() => parseListing(listing), [listing]);
-  const auto = useMemo(() => {
-    if (isComputer) return evaluate(device, scan.info, expected);
-    // Anything needing a feature that isn't ticked is skipped
-    const out = {};
-    checks.forEach((c) => { if (c.needs && !features[c.needs]) out[c.id] = { status: 'na', detail: 'Not on this one' }; });
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isComputer, device, scan.info, expected, features]);
+  const auto = useMemo(() => (isComputer ? evaluate(device, scan.info, expected) : {}), [isComputer, device, scan.info, expected]);
 
   const isAuto = (id) => auto[id] && DONE.includes(auto[id].status);
   const manualItems = checks.filter((c) => !c.final && !isAuto(c.id)).map((c) => ({ ...c, hint: auto[c.id] ? auto[c.id].detail : null }));
@@ -128,7 +120,7 @@ export default function App() {
 
   const start = () => { setManual({}); setStartedAt(Date.now()); setFinishedAt(null); setScreen('run'); };
   const finish = () => { setFinishedAt((f) => f || Date.now()); setScreen('result'); };
-  const newTest = () => { resetDriveTest(); pickedByHand.current = false; screenRef.current = 'start'; setColour(''); setModel(''); setFeatures(defaultFeatures(device)); setLookup(null); setResetAt(null); setManual({}); setListing(''); setBoxId(''); setStartedAt(null); setFinishedAt(null); setScreen('start'); runScan(true); };
+  const newTest = () => { resetDriveTest(); pickedByHand.current = false; screenRef.current = 'start'; setColour(''); setModel(''); setLookup(null); setResetAt(null); setManual({}); setListing(''); setBoxId(''); setStartedAt(null); setFinishedAt(null); setScreen('start'); runScan(true); };
 
   const deviceLabel = screen === 'start' ? null
     : isComputer && scan.info ? (machineName(scan.info, device) === 'Custom' ? 'Custom PC' : machineName(scan.info, device))
@@ -168,7 +160,7 @@ export default function App() {
       <Header deviceLabel={deviceLabel} startedAt={screen === 'start' ? null : startedAt} finishedAt={finishedAt} right={headerRight} version={appInfo.uiVersion} />
 
       {screen === 'start' && (
-        <Start colour={colour} setColour={setColour} scan={scan} detectedType={detectedType} title={title} specDiff={specDiff} device={device} setDevice={setDevice} features={features} setFeatures={setFeatures} model={model} setModel={setModel} listing={listing} setListing={setListing} boxId={boxId} setBoxId={setBoxId} counts={counts} onStart={start} />
+        <Start colour={colour} setColour={setColour} scan={scan} detectedType={detectedType} title={title} specDiff={specDiff} device={device} setDevice={setDevice} model={model} setModel={setModel} listing={listing} setListing={setListing} boxId={boxId} setBoxId={setBoxId} counts={counts} onStart={start} />
       )}
       {screen === 'run' && (
         <Runner key={jumpTo || 'run'} startAt={jumpTo} items={manualItems} results={manual} setResult={setResult} setNote={setNote} onFinish={finish} model={model} setModel={setModel} isMac={device === 'mac'} info={isComputer ? scan.info : null} />

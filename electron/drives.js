@@ -2,14 +2,16 @@
 // Nothing here ever writes to the drive itself. The write-speed test makes one temporary
 // file on the drive's own partition and deletes it straight after.
 //
-// Windows: drives.ps1 for the list + health; the scan reads \\.\PhysicalDriveN directly
-//          (needs the app running as admin, which it asks for when it starts).
+// Windows: drives.ps1 for the list + health; drive-read.ps1 reads the disk for the scan
+//          and read speed (needs the app running as admin, which it asks for when it starts).
 // Mac:     diskutil for the list + health; write speed on a mounted volume.
 //          (macOS doesn't let apps read the raw disk without root, so no surface scan.)
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
+const { spawn } = require('child_process');
 const { run, runScript } = require('./systemInfo');
 
 const MB = 1024 * 1024;
@@ -67,126 +69,53 @@ async function listDrives(checksDir) {
   }
 }
 
-// ---- Raw reading (Windows) -------------------------------------------------
+// ---- Reading the drive (Windows) -------------------------------------------
+// Done by checks/drive-read.ps1 (it ships with the screens, so fixes arrive as normal
+// updates). It prints "P {progress}" lines and a final "R {result}" or "E {error}".
 
-const ALIGN = 4096;
-const alignDown = (n) => Math.floor(n / ALIGN) * ALIGN;
-
-async function openRaw(number) {
-  const test = process.env.PTS_RAW_TEST; // developer testing only: a file standing in for a disk
-  if (process.platform !== 'win32' && !test) throw new Error('Surface scan needs Windows');
-  try {
-    return await fs.promises.open(test || `\\\\.\\PhysicalDrive${Number(number)}`, 'r');
-  } catch (err) {
-    throw new Error(err.code === 'EPERM' || err.code === 'EACCES' ? 'Windows blocked reading the drive. Close the app and open it again, choosing Yes when Windows asks.' : err.message);
-  }
+function readScript(checksDir, args, send) {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') { resolve({ ok: false, error: 'Needs Windows' }); return; }
+    const source = fs.readFileSync(path.join(checksDir, 'drive-read.ps1'), 'utf8');
+    const temp = path.join(os.tmpdir(), 'pts-drive-read.ps1');
+    fs.writeFileSync(temp, source, 'utf8');
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', temp, ...args], { windowsHide: true });
+    job = { stop: false, child };
+    let result = null;
+    let stderr = '';
+    let buffer = '';
+    const line = (l) => {
+      const kind = l.slice(0, 2);
+      if (!['P ', 'R ', 'E '].includes(kind)) return;
+      let data;
+      try { data = JSON.parse(l.slice(2)); } catch { return; }
+      if (kind === 'P ') send(data);
+      else if (kind === 'R ') result = { ok: true, ...data };
+      else result = { ok: false, error: data.error };
+    };
+    child.stdout.on('data', (d) => {
+      buffer += d.toString();
+      let i;
+      while ((i = buffer.indexOf('\n')) !== -1) { line(buffer.slice(0, i).trim()); buffer = buffer.slice(i + 1); }
+    });
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    child.on('close', () => {
+      if (buffer.trim()) line(buffer.trim());
+      const stopped = job && job.stop;
+      job = null;
+      if (result) resolve(result);
+      else if (stopped) resolve({ ok: true, stopped: true });
+      else resolve({ ok: false, error: (stderr.trim().split('\n').pop() || 'The drive test stopped unexpectedly').slice(0, 300) });
+    });
+  });
 }
 
-// Read one block; returns ms taken, or -1 if it couldn't be read
-async function readBlock(fh, buf, offset, length) {
-  const t = performance.now();
-  try {
-    const { bytesRead } = await fh.read(buf, 0, length, offset);
-    if (bytesRead < length) return -1;
-    return performance.now() - t;
-  } catch {
-    return -1;
-  }
-}
-
-// Re-read a failed block in small pieces to count how much is actually bad
-async function measureBad(fh, offset, length) {
-  const piece = 64 * 1024;
-  const buf = Buffer.alloc(piece);
-  let bad = 0;
-  for (let o = offset; o < offset + length; o += piece) {
-    if (job && job.stop) break;
-    if ((await readBlock(fh, buf, o, piece)) < 0) bad += piece;
-  }
-  return bad;
-}
-
-// mode 'quick': ~2000 spots spread over the whole drive + the start and end
-// mode 'full' : every block, start to finish
-async function scan({ number, mode, sizeBytes, media }, send) {
-  const fh = await openRaw(number);
-  job = { stop: false };
-  const size = alignDown(sizeBytes);
-  const isHdd = /hdd/i.test(media || '');
-  const block = mode === 'full' ? 8 * MB : MB;
-  const slowMsPerMB = isHdd ? 60 : 25; // slower than this = a weak area
-  const offsets = [];
-  if (mode === 'full') {
-    for (let o = 0; o < size; o += block) offsets.push(o);
-  } else {
-    const edge = Math.min(256 * MB, size / 4);
-    for (let o = 0; o < edge; o += block) offsets.push(o, alignDown(size - edge + o));
-    const spots = 2000;
-    for (let i = 0; i < spots; i++) offsets.push(alignDown((size - block) * (i / (spots - 1))));
-  }
-  const total = offsets.reduce((sum, o) => sum + Math.min(block, size - o), 0);
-  const res = { mode, done: 0, total, badBytes: 0, badSpots: [], slow: 0, blocks: 0, startedAt: Date.now() };
-  const buf = Buffer.alloc(block);
-  let lastSend = 0;
-  try {
-    for (const o of offsets) {
-      if (job.stop) { res.stopped = true; break; }
-      const len = Math.min(block, size - o);
-      if (len <= 0) continue;
-      const ms = await readBlock(fh, buf, o, len);
-      res.blocks++;
-      if (ms < 0) {
-        const bad = await measureBad(fh, o, len);
-        res.badBytes += bad || len;
-        if (res.badSpots.length < 20) res.badSpots.push(Math.round(o / MB));
-      } else if (ms / (len / MB) > slowMsPerMB) {
-        res.slow++;
-      }
-      res.done += len;
-      const now = Date.now();
-      if (now - lastSend > 250) {
-        lastSend = now;
-        const secs = (now - res.startedAt) / 1000;
-        send({ ...res, speed: res.done / MB / Math.max(secs, 0.001), eta: secs > 2 ? ((total - res.done) / res.done) * secs : null });
-      }
-    }
-  } finally {
-    await fh.close().catch(() => {});
-    job = null;
-  }
-  const secs = (Date.now() - res.startedAt) / 1000;
-  return { ok: true, ...res, speed: res.done / MB / Math.max(secs, 0.001), seconds: secs };
+async function scan(checksDir, { number, mode, sizeBytes, media }, send) {
+  const res = await readScript(checksDir, ['-Disk', String(Number(number)), '-Mode', mode === 'full' ? 'full' : 'quick', '-Size', String(Math.floor(sizeBytes)), '-Hdd', /hdd/i.test(media || '') ? '1' : '0'], (p) => send({ ...p, mode }));
+  return { mode, ...res };
 }
 
 // ---- Speed -----------------------------------------------------------------
-
-// Sequential read straight from the disk (no file cache), several reads at once like a benchmark
-async function readSpeed(number, sizeBytes, seconds = 5) {
-  const fh = await openRaw(number);
-  const chunk = 8 * MB;
-  const depth = 4;
-  const size = alignDown(sizeBytes);
-  const limit = Math.min(size, 4096 * MB);
-  let pos = 0;
-  let bytes = 0;
-  const t0 = performance.now();
-  const worker = async () => {
-    const buf = Buffer.alloc(chunk);
-    while (performance.now() - t0 < seconds * 1000 && !(job && job.stop)) {
-      const o = pos;
-      pos += chunk;
-      if (pos > limit) pos = 0;
-      const { bytesRead } = await fh.read(buf, 0, chunk, o);
-      bytes += bytesRead;
-    }
-  };
-  try {
-    await Promise.all(Array.from({ length: depth }, worker));
-  } finally {
-    await fh.close().catch(() => {});
-  }
-  return bytes / MB / ((performance.now() - t0) / 1000);
-}
 
 // Writes a temporary file on one of the drive's partitions, flushes it to the drive, deletes it
 async function writeSpeed(volume) {
@@ -209,31 +138,33 @@ async function writeSpeed(volume) {
   return total / MB / secs;
 }
 
-async function speed({ number, sizeBytes, volumes }, send) {
-  job = { stop: false };
+async function speed(checksDir, { number, sizeBytes, volumes }, send) {
   const out = { ok: true, read: null, write: null, notes: [] };
-  try {
-    if (process.platform === 'win32') {
-      send({ phase: 'read' });
-      try { out.read = await readSpeed(number, sizeBytes); } catch (err) { out.notes.push('Read test: ' + err.message); }
-    } else {
-      out.notes.push('Read speed needs Windows (macOS doesn’t let apps read the drive directly)');
-    }
-    const vol = (volumes || []).filter((v) => v.free > 200 * MB).sort((a, b) => b.free - a.free)[0];
-    if (vol) {
-      send({ phase: 'write' });
-      try { out.write = await writeSpeed(vol); } catch (err) { out.notes.push('Write test: ' + err.message); }
-    } else {
-      out.notes.push('No partition with free space, so write speed wasn’t tested (format the drive to test it)');
-    }
-  } finally {
-    job = null;
+  if (process.platform === 'win32') {
+    send({ phase: 'read' });
+    const r = await readScript(checksDir, ['-Disk', String(Number(number)), '-Mode', 'speed', '-Size', String(Math.floor(sizeBytes))], () => {});
+    if (r.stopped) return { ...out, stopped: true };
+    if (r.ok && r.read != null) out.read = r.read;
+    else out.notes.push('Read test: ' + r.error);
+  } else {
+    out.notes.push('Read speed needs Windows (macOS doesn’t let apps read the drive directly)');
+  }
+  const vol = (volumes || []).filter((v) => v.free > 200 * MB).sort((a, b) => b.free - a.free)[0];
+  if (vol) {
+    send({ phase: 'write' });
+    job = { stop: false };
+    try { out.write = await writeSpeed(vol); } catch (err) { out.notes.push('Write test: ' + err.message); } finally { job = null; }
+  } else {
+    out.notes.push('No partition with free space, so write speed wasn’t tested (format the drive to test it)');
   }
   return out;
 }
 
 function stop() {
-  if (job) job.stop = true;
+  if (job) {
+    job.stop = true;
+    if (job.child) job.child.kill();
+  }
   return { ok: true };
 }
 

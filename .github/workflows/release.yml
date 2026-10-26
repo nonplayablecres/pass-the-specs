@@ -85,3 +85,18 @@ jobs:
         with:
           name: mac-test
           path: release/PassTheSpecs-mac-*.zip
+
+  # Manual test runs only: checks the drive scripts work on a real Windows machine
+  test-drive-scripts:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: List drives, quick scan and read speed on disk 0
+        shell: powershell
+        run: |
+          $json = powershell -NoProfile -ExecutionPolicy Bypass -File public/checks/drives.ps1
+          $json
+          $d = ($json | ConvertFrom-Json)[0]
+          powershell -NoProfile -ExecutionPolicy Bypass -File public/checks/drive-read.ps1 -Disk $d.number -Mode quick -Size $d.sizeBytes -Hdd 0 | Select-Object -Last 3
+          powershell -NoProfile -ExecutionPolicy Bypass -File public/checks/drive-read.ps1 -Disk $d.number -Mode speed -Size $d.sizeBytes -Seconds 3

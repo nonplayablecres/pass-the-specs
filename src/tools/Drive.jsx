@@ -154,8 +154,19 @@ function Speed({ d, report }) {
   );
 }
 
+// The scan / speed test changed in app 0.1.15; older app copies can't run them
+const older = (v, than) => {
+  const a = String(v || '0').split('.').map(Number);
+  const b = than.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] || 0) !== b[i]) return (a[i] || 0) < b[i];
+  return false;
+};
+let shellVersion = null;
+
 export default function Drive({ step, report, model, setModel }) {
   const s = useDriveState();
+  const [shell, setShell] = useState(shellVersion);
+  useEffect(() => { if (!shellVersion && bridge.inShell) bridge.appInfo().then((i) => { shellVersion = i.shellVersion || '0'; setShell(shellVersion); }).catch(() => {}); }, []);
   useEffect(() => {
     if (!state.drives && !state.loading) loadDrives();
     return bridge.onDriveProgress((p) => setState({ progress: p }));
@@ -177,10 +188,11 @@ export default function Drive({ step, report, model, setModel }) {
     <div className="tool" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Picker drives={s.drives} picked={s.picked} onPick={pick} />
       {d && step === 'health' && <Health d={d} report={report} />}
-      {d && step === 'scan' && (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
+      {d && step !== 'health' && shell && older(shell, '0.1.15') && <div className="warn">This test needs the newest app (v0.1.15 or later). Download it once from the latest release, then it keeps itself up to date.</div>}
+      {d && step === 'scan' && !(shell && older(shell, '0.1.15')) && (typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
         ? <div className="hint">macOS doesn’t let apps read every sector, so the bad sector scan needs a Windows PC. On a Mac, rely on the health check and speed test.</div>
         : <Scan d={d} report={report} />)}
-      {d && step === 'speed' && <Speed d={d} report={report} />}
+      {d && step === 'speed' && !(shell && older(shell, '0.1.15')) && <Speed d={d} report={report} />}
       {!d && s.drives.some((x) => !x.boot) && <span className="muted">Pick the drive above.</span>}
     </div>
   );
