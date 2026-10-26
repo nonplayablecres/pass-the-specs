@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('pts', {
   openUrl: (url) => ipcRenderer.invoke('pts:open', url),
   ports: () => ipcRenderer.invoke('pts:ports'),
   cexSearch: (query) => ipcRenderer.invoke('pts:cex-search', query),
+  mediaAccess: (kind) => ipcRenderer.invoke('pts:media-access', kind),
   touchId: (action) => ipcRenderer.invoke('pts:touch-id', action),
   batteryReport: (name) => ipcRenderer.invoke('pts:battery-report', name),
   saveReport: (name, text) => ipcRenderer.invoke('pts:save-report', { name, text }),

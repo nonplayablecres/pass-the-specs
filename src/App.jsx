@@ -91,14 +91,14 @@ export default function App() {
     if (screen === 'start' || !isComputer || !scan.info) return;
     let cancelled = false;
     setLookup({ loading: true });
-    findListing(scan.info, device).then((res) => {
+    findListing(scan.info, device, { colour }).then((res) => {
       if (cancelled) return;
       setLookup(res);
       if (res.status === 'exact' && res.exact.length === 1) setBoxId(res.exact[0].boxId);
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen === 'start', isComputer, scan.info, device]);
+  }, [screen === 'start', isComputer, scan.info, device, colour]);
 
   const start = () => { setManual({}); setStartedAt(Date.now()); setFinishedAt(null); setScreen('run'); };
   const finish = () => { setFinishedAt((f) => f || Date.now()); setScreen('result'); };

@@ -166,6 +166,21 @@ ipcMain.handle('pts:save-report', async (_e, { name, text }) => {
   }
 });
 
+// Camera / microphone access, asked once through the system (stops repeated macOS pop-ups)
+ipcMain.handle('pts:media-access', async (_e, kind) => {
+  const { systemPreferences } = require('electron');
+  if (!['camera', 'microphone'].includes(kind)) return { status: 'unknown' };
+  try {
+    if (process.platform === 'darwin') {
+      const status = systemPreferences.getMediaAccessStatus(kind);
+      if (status === 'not-determined') return { status: (await systemPreferences.askForMediaAccess(kind)) ? 'granted' : 'denied' };
+      return { status };
+    }
+    if (process.platform === 'win32') return { status: systemPreferences.getMediaAccessStatus(kind) };
+  } catch { /* fall through */ }
+  return { status: 'unknown' };
+});
+
 // Touch ID test on a Mac: asks for a fingerprint, returns whether it worked
 ipcMain.handle('pts:touch-id', async (_e, action) => {
   if (process.platform !== 'darwin') return { ok: false, supported: false };

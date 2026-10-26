@@ -31,6 +31,7 @@ export function parseListing(text) {
   const gpu = t.match(/\b((?:RTX|GTX|RX|Arc)\s?[A-Z]?\d{3,4}(?:\s?(?:Ti|Super|XT|XTX))?)\b/i);
   const parts = t.split('/').map((s) => s.trim());
   const grade = /^[A-C]$/i.test(parts[parts.length - 1] || '') ? parts[parts.length - 1].toUpperCase() : null;
+  const colour = colourOf(grade ? parts.slice(1, -1) : parts.slice(1));
   const out = {
     title: t,
     name: parts[0] || t,
@@ -39,9 +40,30 @@ export function parseListing(text) {
     storageType: sto ? sto[3].toUpperCase() : null,
     cpu: cpu ? cpu[1] : null,
     gpu: gpu ? gpu[1] : null,
-    grade
+    grade,
+    colour
   };
   return out.ramGB || out.storageGB || out.cpu ? out : { ...out, unreadable: true };
+}
+
+// Finds a colour in a listing, written as a code (SB) or a name (Space Black / Silver)
+export function colourOf(parts) {
+  for (const raw of parts) {
+    const p = String(raw).trim();
+    const hit = SETTINGS.macColours.find(([code, name]) => p.toUpperCase() === code || p.toLowerCase() === name.toLowerCase());
+    if (hit) return hit[0];
+  }
+  for (const raw of parts) {
+    const p = String(raw).trim();
+    // Other short all-capital codes that aren't Windows versions, e.g. a colour CeX added later
+    if (/^[A-Z]{2,3}$/.test(p) && !/^(W\d+|OS|SSD|HDD|RAM)$/.test(p)) return p;
+  }
+  return null;
+}
+
+export function colourName(code) {
+  const hit = SETTINGS.macColours.find(([c]) => c === code);
+  return hit ? hit[1] : code;
 }
 
 export function shortCpu(name) {

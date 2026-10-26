@@ -3,11 +3,11 @@
 //   near  - same model and CPU, but RAM / storage / graphics differ
 //   none  - nothing on CeX -> price request
 import { bridge } from './bridge.js';
-import { gpuLabel, machineName, mainDisk, parseListing, shortCpu, storageLabel } from './autoChecks.js';
+import { colourName, gpuLabel, machineName, mainDisk, parseListing, shortCpu, storageLabel } from './autoChecks.js';
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-export async function findListing(info, deviceType) {
+export async function findListing(info, deviceType, opts = {}) {
   if (!info) return { status: 'error', error: 'No scan' };
   const name = machineName(info, deviceType);
   const cpu = shortCpu(info.cpu);
@@ -38,8 +38,10 @@ export async function findListing(info, deviceType) {
     if (p.storageGB && target.storageGB && Math.abs(p.storageGB - target.storageGB) / p.storageGB > 0.1) diffs.push(`${storageLabel(p.storageGB)} ${p.storageType || ''}`.trim());
     const gpuOk = target.gpu ? !!p.gpu && norm(target.gpu).includes(norm(p.gpu)) : !p.gpu;
     if (!gpuOk) diffs.push(p.gpu || 'no graphics card');
+    // Colour (Macs): only the colour picked on the start screen is an exact match
+    if (opts.colour && p.colour && p.colour !== opts.colour) diffs.push(colourName(p.colour));
 
-    const item = { ...hit, grade: p.grade || '?', diffs };
+    const item = { ...hit, grade: p.grade || '?', colour: p.colour || null, diffs };
     if (diffs.length) near.push(item); else exact.push(item);
   }
 

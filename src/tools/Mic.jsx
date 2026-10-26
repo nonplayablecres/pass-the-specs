@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
+import { accessHelp, openMedia } from '../lib/media.js';
 
 export default function Mic() {
   const [level, setLevel] = useState(0);
   const [error, setError] = useState('');
   const [state, setState] = useState('idle'); // idle | recording | playing
   const streamRef = useRef(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let raf = 0;
     let ctx = null;
     let stopped = false;
-    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+    setError('');
+    openMedia('microphone', { audio: true }).then((stream) => {
       if (stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
       streamRef.current = stream;
       ctx = new AudioContext();
@@ -27,14 +30,14 @@ export default function Mic() {
         raf = requestAnimationFrame(tick);
       };
       tick();
-    }).catch(() => setError('No microphone found, or access was blocked.'));
+    }).catch((err) => setError(err.message === 'missing' ? 'No microphone found on this machine.' : accessHelp('microphone')));
     return () => {
       stopped = true;
       cancelAnimationFrame(raf);
       if (ctx) ctx.close();
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [attempt]);
 
   const record = () => {
     if (!streamRef.current) return;
@@ -52,7 +55,7 @@ export default function Mic() {
     setTimeout(() => rec.stop(), 3000);
   };
 
-  if (error) return <div className="hint">{error}</div>;
+  if (error) return <div className="warn">{error}<button type="button" className="btn" style={{ alignSelf: 'flex-start', minHeight: 40, marginTop: 6 }} onClick={() => setAttempt((a) => a + 1)}>Try again</button></div>;
   const lit = Math.round(level * 20);
   return (
     <div className="tool" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', maxWidth: 680 }}>

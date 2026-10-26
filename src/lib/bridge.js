@@ -112,10 +112,17 @@ export const bridge = {
     const dell = [['8GB', '256GB', 'A', 380], ['8GB', '256GB', 'B', 340], ['8GB', '256GB', 'C', 300], ['16GB', '256GB', 'B', 400], ['16GB', '512GB', 'B', 440]]
       .map(([ram, ssd, g, sell]) => ({ boxId: `SLAPDELLAT5420${ram === '8GB' ? '8' : '16'}${ssd === '256GB' ? '25' : '51'}${g}`, boxName: `Dell Latitude 5420/i5-1145G7/${ram} Ram/${ssd} SSD/14"/W11/${g}`, category: 'Laptops - Windows', sell, cash: Math.round(sell * 0.45), exchange: Math.round(sell * 0.6) }));
     const custom = [{ boxId: 'SDESCUSR75700X3D322TB4060TIB', boxName: 'Custom/Ryzen 7 5700X3D/32GB DDR4/2TB SSD/RTX 4060 Ti/W11/B', category: 'Desktops - Custom', sell: 750, cash: 340, exchange: 450 }];
+    const mac = [['SB', 'A', 1400], ['SB', 'B', 1300], ['Silver', 'B', 1290]].map(([c, g, sell], i) => ({ boxId: `SLAPAPPMBP172M5${i}${g}`, boxName: `MacBook Pro 17,2/M5 (10-CPU 10-GPU)/16GB Ram/512GB SSD/14"/${c}/${g}`, category: 'Apple Laptops', sell, cash: Math.round(sell * 0.45), exchange: Math.round(sell * 0.6) }));
+    if (/macbook/i.test(query)) return { ok: true, hits: mac, mock: true };
     // add ?near or ?none to the preview address to see the price-request cases
     const q = window.location.search;
     const hits = /custom/i.test(query) ? custom : /none/.test(q) ? [] : /near/.test(q) ? dell.filter((d) => !d.boxName.includes('/8GB')) : dell;
     return { ok: true, hits, mock: true };
+  },
+  // 'granted' | 'denied' | 'restricted' | 'unknown' (older app copies: always 'unknown')
+  async mediaAccess(kind) {
+    if (hasShell && window.pts.mediaAccess) return window.pts.mediaAccess(kind);
+    return { status: 'unknown' };
   },
   async touchId(action) {
     if (hasShell && window.pts.touchId) return window.pts.touchId(action);

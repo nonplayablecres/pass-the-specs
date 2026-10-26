@@ -30,6 +30,7 @@ function ListingPanel({ lookup, title, boxId, setBoxId, chosen }) {
           {lookup.exact.map((h) => (
             <button key={h.boxId} type="button" className={'grade' + (h.boxId === boxId ? ' on' : '')} onClick={() => setBoxId(h.boxId)} aria-pressed={h.boxId === boxId}>
               <span className="pixel" style={{ fontSize: 14 }}>{h.grade}</span>
+              {h.colour && new Set(lookup.exact.map((x) => x.colour)).size > 1 && <span style={{ fontSize: 11 }}>{h.colour}</span>}
               <span>{money(h.sell)}</span>
             </button>
           ))}
