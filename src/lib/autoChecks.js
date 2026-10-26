@@ -115,6 +115,14 @@ function osLabel(info) {
   return null;
 }
 
+// Snaps the measured screen size to the sizes CeX lists (14", 15.6", 16", 17.3"...).
+// Windows' measurement is a bit rough, so e.g. 15.3 becomes 15 and 15.5 becomes 15.6.
+const SCREEN_SIZES = [10, 10.1, 11, 11.6, 12, 12.5, 13, 13.3, 13.5, 14, 14.5, 15, 15.6, 16, 17, 17.3, 18];
+export function screenSize(inches) {
+  if (!inches) return null;
+  return SCREEN_SIZES.reduce((best, s) => (Math.abs(s - inches) < Math.abs(best - inches) - 0.001 ? s : best), SCREEN_SIZES[0]);
+}
+
 export function cexTitle(info, deviceType) {
   if (!info) return '';
   const d = mainDisk(info);
@@ -122,7 +130,7 @@ export function cexTitle(info, deviceType) {
   const custom = isCustomBuild(info, deviceType);
   // Refresh rate only shown when it's above a normal 60Hz screen
   const hz = info.maxRefresh && info.maxRefresh >= 90 ? `${info.maxRefresh}Hz` : '';
-  const screen = laptop && info.screenInches ? `${Math.round(info.screenInches * 10) / 10}"${hz}` : null;
+  const screen = laptop && info.screenInches ? `${screenSize(info.screenInches)}"${hz}` : null;
   // Custom PCs show the memory type (32GB DDR4), everything else 32GB RAM
   const ram = info.ramGB ? `${info.ramGB}GB ${custom && info.ramType ? info.ramType : 'RAM'}` : null;
   return [
@@ -194,7 +202,7 @@ export function evaluate(deviceType, info, expected) {
     r.m4 = { status: 'na', detail: 'Mac: no licence key' };
     r.m7 = { status: 'na', detail: 'Mac: not applicable' };
     r.m28 = { status: 'na', detail: 'Mac: not applicable' };
-    r.m6 = { status: null, detail: 'On a Mac, check Startup Security Utility for a firmware password' };
+    r.m6 = { status: 'na', detail: 'Mac: not checked (can’t be read automatically)' };
   }
 
   if (!info) return r;
@@ -255,7 +263,9 @@ export function evaluate(deviceType, info, expected) {
     const bp = info.biosPassword || {};
     if (bp.known && !bp.set) r.m6 = { status: 'pass', detail: 'No BIOS password set' + (bp.source && bp.source !== 'generic' ? ` (${bp.source} firmware)` : '') };
     else if (bp.known && bp.set && bp.source !== 'generic') r.m6 = { status: 'fail', detail: bp.detail || 'BIOS password set' };
-    else if (bp.known && bp.set) r.m6 = { status: null, detail: 'Firmware says a password may be set. Check in the BIOS.' };
+    else if (bp.known && bp.set) r.m6 = { status: 'fail', detail: 'Firmware reports a BIOS password is set' };
+    // Can't be read on this machine: skipped rather than asking the tester
+    else r.m6 = { status: 'na', detail: 'Not checked: this machine doesn’t report BIOS passwords' };
   }
 
   // Wireless
