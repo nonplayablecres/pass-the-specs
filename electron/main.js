@@ -3,13 +3,6 @@
 // The screens themselves live in /src (React) and are built into /dist.
 
 const { app, BrowserWindow, ipcMain, session, clipboard, shell, Menu, dialog } = require('electron');
-
-// Mac: open the microphone from the main app, not a separate helper process.
-// On a self-signed app macOS can't tie the helper back to "Pass the Specs",
-// so the Allow never sticks and the mic prompt keeps coming back.
-if (process.platform === 'darwin') {
-  app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
-}
 const os = require('os');
 
 // ---- Crash safety net -------------------------------------------------------
