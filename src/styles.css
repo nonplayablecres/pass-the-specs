@@ -498,3 +498,15 @@ button.badge.on { background: var(--red); }
   .home-content .start-inner:has(.colours):has(.warn) > div > .eyebrow { display: none; }
   .home-content .start-inner:has(.colours):has(.warn) .grades.colours .grade { min-height: 32px; }
 }
+/* Keep the corner label (DETECTED) clear of the icon */
+.home-content .types .type { padding: 16px 6px 10px; }
+.type .soon { top: 5px; right: 6px; line-height: 1; }
+.home-content .start-inner:has(.colours):has(.warn) .types .type { padding: 14px 6px 6px; gap: 4px; }
+@media (max-height: 860px) {
+  .home-content .start-inner:has(.colours):has(.warn) .types .type { min-height: 58px; }
+  .home-content .start-inner:has(.colours):has(.warn) .types .type svg { width: 22px; height: 22px; }
+}
+@media (max-height: 740px) {
+  .home-content .start-inner:has(.colours):has(.warn) > .muted:last-child { display: none; }
+  .home-content .start-inner:has(.colours):has(.warn) .grades.colours .grade { min-height: 28px; }
+}
