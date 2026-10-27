@@ -52,6 +52,7 @@ export default function Start({ colour, setColour, scan, detectedType, title, sp
       </nav>
 
     <main className="home-main">
+      <div className="home-content">
       <div className="start-inner">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span className="eyebrow">Ready</span>
@@ -169,6 +170,7 @@ export default function Start({ colour, setColour, scan, detectedType, title, sp
           <Battery battery={info.battery} size="big" />
         </aside>
       )}
+      </div>
     </main>
     </div>
   );
