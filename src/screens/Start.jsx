@@ -1,6 +1,7 @@
 import { DEVICE_TYPES, checksFor } from '../data/checklists.js';
 import { SETTINGS, parseListing } from '../lib/autoChecks.js';
 import Battery from '../components/Battery.jsx';
+import { Lockup } from '../components/Logo.jsx';
 
 const MODEL_HINT = {
   monitor: 'Found automatically when you run the screen tests, or type it',
@@ -12,16 +13,43 @@ const MODEL_HINT = {
   controller: 'e.g. DualSense'
 };
 
-export default function Start({ colour, setColour, scan, detectedType, title, specDiff, device, setDevice, model, setModel, listing, setListing, boxId, setBoxId, counts, onStart }) {
+export default function Start({ colour, setColour, scan, detectedType, title, specDiff, device, setDevice, model, setModel, listing, setListing, boxId, setBoxId, counts, onStart, autoRows = [], version, update, onRescan, onReload }) {
   const parsed = parseListing(listing);
   const info = scan.info;
   const current = DEVICE_TYPES.find((d) => d.id === device);
   const isComputer = current && current.list === 'computer';
 
+  const autoDone = autoRows.filter((r) => r.status === 'pass').length;
+  const autoBad = autoRows.filter((r) => r.status === 'fail').length;
+  const showAside = isComputer && info && autoRows.length > 0;
+
   return (
-    <main className="start">
+    <div className="home">
+      <nav className="home-nav" aria-label="Main">
+        <span className="home-logo"><Lockup scale={1} /></span>
+        <div className="home-links">
+          <button type="button" className="home-link on" aria-current="page">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
+            New test
+          </button>
+          {isComputer && (
+            <button type="button" className="home-link" onClick={onRescan} disabled={scan.loading}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" aria-hidden="true"><path d="M20 12a8 8 0 11-2.3-5.6M20 4v5h-5" /></svg>
+              {scan.loading ? 'Scanning…' : 'Re-scan'}
+            </button>
+          )}
+        </div>
+        <div className="home-status">
+          {update && update.status === 'ready'
+            ? <button type="button" className="link-btn" style={{ color: 'var(--green-text)', textAlign: 'left' }} onClick={onReload}>● UPDATE V{update.version} READY · LOAD</button>
+            : <span style={{ color: 'var(--green-text)' }}>● UP TO DATE</span>}
+          <span className="pixel">V{version}</span>
+        </div>
+      </nav>
+
+    <main className="home-main">
       <div className="start-inner">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span className="eyebrow">Ready</span>
           <h1 className="title-xl">New test</h1>
         </div>
@@ -39,7 +67,7 @@ export default function Start({ colour, setColour, scan, detectedType, title, sp
                 </>
               )}
             </div>
-            {info && <Battery battery={info.battery} />}
+            {info && !showAside && <Battery battery={info.battery} />}
             {info && <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--green-text)' }}>{scan.mock ? 'EXAMPLE DATA' : 'DETECTED'}</span>}
           </div>
         )}
@@ -119,6 +147,25 @@ export default function Start({ colour, setColour, scan, detectedType, title, sp
           {counts.na ? ` · ${counts.na} skipped (not on this device)` : ''}
         </span>
       </div>
+
+      {showAside && (
+        <aside className="home-aside" aria-label="Scan summary">
+          <div className="side-card">
+            <div className="side-head">
+              <span className="side-title">AUTO CHECKS</span>
+              <span className="pixel" style={{ fontSize: 14, color: autoBad ? 'var(--red-text)' : 'var(--green-text)' }}>{autoDone}<small>/{autoRows.length}</small></span>
+            </div>
+            <div className="bar big" style={{ height: 6 }}><div style={{ width: `${(autoDone / autoRows.length) * 100}%`, background: autoBad ? 'var(--red)' : 'var(--green)' }} /></div>
+            {autoRows.map((r) => (
+              <div key={r.id} className="side-row">
+                <span><b style={{ color: r.status === 'fail' ? 'var(--red-text)' : r.status === 'diff' ? 'var(--amber)' : 'var(--green-text)' }}>{r.status === 'fail' ? '✕' : r.status === 'diff' ? '!' : '✓'}</b> {r.title}</span>
+              </div>
+            ))}
+          </div>
+          <Battery battery={info.battery} size="big" />
+        </aside>
+      )}
     </main>
+    </div>
   );
 }

@@ -4,6 +4,8 @@ import Start from './screens/Start.jsx';
 import Runner from './screens/Runner.jsx';
 import Result from './screens/Result.jsx';
 import Reset from './screens/Reset.jsx';
+import Splash from './screens/Splash.jsx';
+import { InkFilter } from './components/Logo.jsx';
 import { DEVICE_TYPES, checksFor } from './data/checklists.js';
 import { cexTitle, evaluate, machineName, parseListing } from './lib/autoChecks.js';
 import { bridge } from './lib/bridge.js';
@@ -18,6 +20,8 @@ export default function App() {
   const [appInfo, setAppInfo] = useState({ uiVersion: __APP_VERSION__ });
   const [update, setUpdate] = useState(null);
   const [screen, setScreen] = useState('start');
+  const [splash, setSplash] = useState(true);
+  const hideSplash = useCallback(() => setSplash(false), []);
   const [device, setDeviceState] = useState('laptop');
   // Once the tester picks a type, or a test has started, the scan must not change it
   const pickedByHand = useRef(false);
@@ -122,6 +126,13 @@ export default function App() {
   const finish = () => { setFinishedAt((f) => f || Date.now()); setScreen('result'); };
   const newTest = () => { resetDriveTest(); pickedByHand.current = false; screenRef.current = 'start'; setColour(''); setModel(''); setLookup(null); setResetAt(null); setManual({}); setListing(''); setBoxId(''); setStartedAt(null); setFinishedAt(null); setScreen('start'); runScan(true); };
 
+  // The logo goes back to the start. Mid-test that would lose the answers, so ask first;
+  // after the result the report is already saved.
+  const goHome = () => {
+    if (screen === 'run' && !window.confirm('Leave this test? Results will be lost.')) return;
+    newTest();
+  };
+
   const deviceLabel = screen === 'start' ? null
     : isComputer && scan.info ? (machineName(scan.info, device) === 'Custom' ? 'Custom PC' : machineName(scan.info, device))
     : model.trim() ? model.trim() : dev ? dev.name : null;
@@ -144,7 +155,9 @@ export default function App() {
 
   return (
     <div className="app">
-      {update && update.status === 'ready' && (
+      <InkFilter />
+      {splash && <Splash done={!scan.loading} version={appInfo.uiVersion} update={update} onFinished={hideSplash} />}
+      {update && update.status === 'ready' && screen !== 'start' && (
         <div className="update-bar">
           <span>Update <b>v{update.version}</b> downloaded.{screen !== 'start' ? ' It will load after this test.' : ''}</span>
           {screen === 'start' && <button type="button" className="btn light" style={{ minHeight: 40 }} onClick={() => bridge.reload()}>LOAD IT NOW</button>}
@@ -157,10 +170,12 @@ export default function App() {
         </div>
       )}
 
-      <Header deviceLabel={deviceLabel} startedAt={screen === 'start' ? null : startedAt} finishedAt={finishedAt} right={headerRight} version={appInfo.uiVersion} />
+      {screen !== 'start' && <Header deviceLabel={deviceLabel} startedAt={startedAt} finishedAt={finishedAt} right={headerRight} version={appInfo.uiVersion} onHome={goHome} />}
 
       {screen === 'start' && (
-        <Start colour={colour} setColour={setColour} scan={scan} detectedType={detectedType} title={title} specDiff={specDiff} device={device} setDevice={setDevice} model={model} setModel={setModel} listing={listing} setListing={setListing} boxId={boxId} setBoxId={setBoxId} counts={counts} onStart={start} />
+        <Start colour={colour} setColour={setColour} scan={scan} detectedType={detectedType} title={title} specDiff={specDiff} device={device} setDevice={setDevice} model={model} setModel={setModel} listing={listing} setListing={setListing} boxId={boxId} setBoxId={setBoxId} counts={counts} onStart={start}
+          autoRows={rows.filter((r) => r.auto && r.status !== 'na')} version={appInfo.uiVersion} update={update}
+          onRescan={() => runScan(false)} onReload={() => bridge.reload()} />
       )}
       {screen === 'run' && (
         <Runner key={jumpTo || 'run'} startAt={jumpTo} items={manualItems} results={manual} setResult={setResult} setNote={setNote} onFinish={finish} model={model} setModel={setModel} isMac={device === 'mac'} info={isComputer ? scan.info : null} />

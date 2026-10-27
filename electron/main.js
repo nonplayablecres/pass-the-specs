@@ -82,7 +82,7 @@ function createWindow() {
     height: 860,
     minWidth: 960,
     minHeight: 680,
-    backgroundColor: '#111113',
+    backgroundColor: '#0a0a0b', // same as the splash screen, so there's no flash on start
     title: 'Pass the Specs',
     autoHideMenuBar: true,
     webPreferences: {

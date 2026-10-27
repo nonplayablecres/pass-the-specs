@@ -4,6 +4,7 @@ import { formatTime } from '../components/Header.jsx';
 import { bridge } from '../lib/bridge.js';
 import Battery from '../components/Battery.jsx';
 import Checklist from '../components/Checklist.jsx';
+import { WordStamp } from '../components/Logo.jsx';
 
 function Barcode({ value }) {
   const ref = useRef(null);
@@ -107,11 +108,12 @@ export default function Result({ items, results, onRetest, battery, rows, device
     <>
       <div className={'band ' + verdict.toLowerCase()}>
         <div className="band-inner">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', opacity: 0.85 }}>RESULT · {formatTime(elapsed)}</span>
-            <span className="verdict">{verdict}</span>
-            <span style={{ fontSize: 18, fontWeight: 600 }}>
-              {verdict === 'PASS' ? 'Ready for stock' : verdict === 'FAIL' ? `${fails.length} thing${fails.length > 1 ? 's' : ''} need${fails.length > 1 ? '' : 's'} fixing` : `${open.length} check${open.length > 1 ? 's' : ''} not done yet`}
+          <WordStamp word={verdict === 'PASS' ? 'PASSED' : verdict === 'FAIL' ? 'FAILED' : 'NOT DONE'} cross={verdict !== 'PASS'} />
+          <div className="band-text">
+            <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.14em', color: 'var(--text-2)' }}>RESULT · TESTED IN <span className="pixel" style={{ fontSize: 10, letterSpacing: 0 }}>{formatTime(elapsed)}</span></span>
+            {(title || deviceName) && <span className="band-title">{title || deviceName}</span>}
+            <span style={{ fontSize: 16, color: 'var(--text-2)' }}>
+              {verdict === 'PASS' ? 'Everything checked out. Pick the grade and print the label.' : verdict === 'FAIL' ? `${fails.length} thing${fails.length > 1 ? 's' : ''} need${fails.length > 1 ? '' : 's'} fixing before it can go on sale.` : `${open.length} check${open.length > 1 ? 's' : ''} not done yet.`}
             </span>
           </div>
           <div className="scores">
