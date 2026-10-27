@@ -510,3 +510,40 @@ button.badge.on { background: var(--red); }
   .home-content .start-inner:has(.colours):has(.warn) > .muted:last-child { display: none; }
   .home-content .start-inner:has(.colours):has(.warn) .grades.colours .grade { min-height: 28px; }
 }
+/* Narrow windows (down to the 960px minimum): keep the auto checks beside the main column */
+@media (max-width: 1180px) {
+  .home-nav { flex-basis: 200px; padding: 22px 10px 18px; }
+  .home-main { flex-basis: 600px; padding-left: 20px; padding-right: 20px; }
+  .home-content { flex-wrap: nowrap; gap: 18px; }
+  .home-content .start-inner { flex: 1 1 auto; }
+  .home-content .home-aside { flex: 0 0 230px; }
+  .home-aside .side-card { padding: 12px 14px; }
+  .home-aside .side-title { font-size: 18px; }
+  .home-aside .side-row { font-size: 12.5px; }
+  .home-aside .battery-big { padding: 12px 14px; gap: 10px; }
+  .home-aside .battery-big .pixel { font-size: 20px !important; }
+  .type span:last-child { font-size: 14px; letter-spacing: 0.04em; }
+}
+@media (max-width: 1180px) {
+  .home-content .start-inner:has(.warn) > div > .eyebrow,
+  .home-content .start-inner:has(.warn) > .muted:last-child { display: none; }
+  .home-content .start-inner:has(.warn) .title-xl { font-size: clamp(38px, 6vh, 72px); }
+  .home-content .start-inner:has(.warn) .types .type { min-height: 56px; padding: 14px 4px 6px; gap: 4px; }
+  .home-content .start-inner:has(.warn) .types .type svg { width: 22px; height: 22px; }
+  .home-content .start-inner:has(.warn) .btn.big { min-height: 52px; font-size: 28px; }
+  .home-content .warn { font-size: 12.5px; padding: 7px 12px; }
+}
+@media (max-width: 1180px) {
+  .home { flex-wrap: nowrap; }
+  .home-nav { flex: 0 0 176px; }
+  .home-logo { zoom: 0.78; padding: 4px 2px; }
+  .home-link { padding: 0 10px; gap: 10px; font-size: 14px; }
+  .home-main { flex: 1 1 auto; padding-left: 16px; padding-right: 16px; }
+  .home-content .detected { padding: 8px 12px; }
+  .home-content .detected span[style*="17px"] { font-size: 15px !important; }
+  .home-content .detected .muted { font-size: 12.5px !important; }
+}
+@media (max-width: 1180px) and (max-height: 760px) {
+  .home-content .start-inner:has(.warn) .grades.colours .grade { min-height: 28px; }
+  .home-content .start-inner:has(.warn) { gap: 8px; }
+}
