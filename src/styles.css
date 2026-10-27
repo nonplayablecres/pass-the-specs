@@ -460,3 +460,50 @@ button.badge.on { background: var(--red); }
   .home-main { padding: 28px 20px; }
 }
 .result .eyebrow { font-family: var(--display); font-weight: 800; font-size: 24px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* Start screen fits a normal laptop window without scrolling */
+.home-main { padding: 30px 40px; gap: 28px; }
+.home-main .start-inner { gap: 16px; }
+.home-main .title-xl { font-size: 78px; }
+.home-main .detected { padding: 12px 16px; }
+.home-main .types .type { min-height: 82px; gap: 8px; }
+.home-main .types .type svg { width: 28px; height: 28px; }
+.home-main .field { gap: 8px; }
+.home-main .field input { min-height: 48px; }
+.home-main .btn.big { min-height: 72px; }
+.home-main .warn { padding: 10px 14px; font-size: 14px; }
+.grades.colours { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+.grades.colours .grade { min-height: 44px; }
+.home-aside .side-card { padding: 16px 18px; gap: 9px; }
+.home-aside .side-row { font-size: 13px; }
+
+/* Shorter windows (1366x768 laptops, scaled screens): tighter start screen */
+@media (max-height: 860px) {
+  .home-main { padding: 22px 36px; }
+  .home-main .start-inner { gap: 12px; }
+  .home-main .title-xl { font-size: 58px; }
+  .home-main .start-inner > div > .eyebrow { font-size: 12px; }
+  .home-main .types .type { min-height: 58px; flex-direction: row; gap: 10px; }
+  .home-main .types .type svg { width: 24px; height: 24px; }
+  .home-main .types .type .soon { top: 3px; right: 4px; font-size: 8px; }
+  .home-main .field { font-size: 12px; }
+  .home-main .field input { min-height: 44px; }
+  .home-main .btn.big { min-height: 62px; font-size: 32px; }
+  .home-main .grades.colours .grade { min-height: 38px; gap: 2px; }
+  .home-main .parsed .tag { padding: 2px 6px; font-size: 12px; }
+  .home-aside { gap: 8px; }
+  .home-aside .side-card { padding: 14px 16px; gap: 7px; }
+  .home-aside .battery-big { padding: 12px 16px; }
+  .home-aside .battery-big .pixel { font-size: 22px !important; }
+  .home-nav { gap: 22px; padding-top: 20px; }
+}
+@media (max-height: 740px) {
+  .home-main { padding-top: 16px; padding-bottom: 16px; }
+  .home-main .title-xl { font-size: 46px; }
+  .home-main .start-inner > div > .eyebrow { display: none; }
+  .home-main .types .type { min-height: 50px; }
+  .home-main .btn.big { min-height: 56px; }
+  .home-main .grades.colours .grade { min-height: 34px; }
+  .home-main .grades.colours .grade .pixel { display: none; }
+  .home-main .detected { padding: 10px 14px; }
+}

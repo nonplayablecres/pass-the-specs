@@ -1,5 +1,5 @@
 import { DEVICE_TYPES, checksFor } from '../data/checklists.js';
-import { SETTINGS, parseListing } from '../lib/autoChecks.js';
+import { SETTINGS, isIMac, parseListing } from '../lib/autoChecks.js';
 import Battery from '../components/Battery.jsx';
 import { Lockup } from '../components/Logo.jsx';
 
@@ -19,6 +19,10 @@ export default function Start({ colour, setColour, scan, detectedType, title, sp
   const current = DEVICE_TYPES.find((d) => d.id === device);
   const isComputer = current && current.list === 'computer';
 
+  // MacBooks: CeX colour codes. Apple-silicon iMacs: colour names. Intel iMacs: no colour.
+  const imac = isIMac(info);
+  const silicon = info && /\bm[1-9]\b|apple/i.test(String(info.cpu || ''));
+  const colours = !info || info.platform !== 'mac' ? [] : imac ? (silicon ? SETTINGS.imacColours.map((n) => [n, n]) : []) : SETTINGS.macColours;
   const autoDone = autoRows.filter((r) => r.status === 'pass').length;
   const autoBad = autoRows.filter((r) => r.status === 'fail').length;
   const showAside = isComputer && info && autoRows.length > 0;
@@ -73,7 +77,7 @@ export default function Start({ colour, setColour, scan, detectedType, title, sp
         )}
 
         <div className="types" role="group" aria-label="Device type">
-          {DEVICE_TYPES.map((t) => (
+          {DEVICE_TYPES.filter((t) => t.ready).map((t) => (
             <button key={t.id} type="button" className="type" aria-pressed={device === t.id}
               disabled={!t.ready || (t.list === 'computer' && detectedType && t.id !== detectedType)}
               title={t.list === 'computer' && detectedType && t.id !== detectedType ? `This machine is a ${detectedType}` : undefined}
@@ -115,10 +119,10 @@ export default function Start({ colour, setColour, scan, detectedType, title, sp
           </div>
         )}
 
-        {isComputer && info && info.platform === 'mac' && (
+        {isComputer && info && info.platform === 'mac' && colours.length > 0 && (
           <div className="field">Colour
-            <div className="grades" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
-              {SETTINGS.macColours.map(([code, name]) => (
+            <div className="grades colours">
+              {colours.map(([code, name]) => (
                 <button key={code} type="button" className={'grade' + (colour === code ? ' on' : '')} aria-pressed={colour === code} onClick={() => setColour(colour === code ? '' : code)}>
                   <span style={{ fontSize: 13 }}>{name}</span>
                   <span className="pixel" style={{ fontSize: 9 }}>{code}</span>

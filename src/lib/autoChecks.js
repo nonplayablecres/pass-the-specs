@@ -7,6 +7,8 @@ export const SETTINGS = {
   // Mac colours as CeX writes them in listings (picked on the start screen).
   // Only SB is confirmed so far; correct the others if CeX uses different codes.
   macColours: [['SB', 'Space Black'], ['SG', 'Space Grey'], ['SL', 'Silver'], ['MN', 'Midnight'], ['ST', 'Starlight'], ['SKB', 'Sky Blue']],
+  // Apple-silicon iMacs: CeX writes the colour out in full (…/24" 4.5K/Silver/B)
+  imacColours: ['Silver', 'Blue', 'Green', 'Pink', 'Yellow', 'Orange', 'Purple'],
   // Mobicode check page. Use {serial} where the serial number goes, e.g.
   // 'https://example-mobicode-site/check?serial={serial}'. Leave '' until you have it.
   mobicodeUrl: '',
@@ -54,6 +56,11 @@ export function colourOf(parts) {
     if (hit) return hit[0];
   }
   for (const raw of parts) {
+    const p = String(raw).trim().toLowerCase();
+    const name = SETTINGS.imacColours.find((n) => n.toLowerCase() === p);
+    if (name) return name;
+  }
+  for (const raw of parts) {
     const p = String(raw).trim();
     // Other short all-capital codes that aren't Windows versions, e.g. a colour CeX added later
     if (/^[A-Z]{2,3}$/.test(p) && !/^(W\d+|OS|SSD|HDD|RAM)$/.test(p)) return p;
@@ -65,6 +72,14 @@ export function colourName(code) {
   const hit = SETTINGS.macColours.find(([c]) => c === code);
   return hit ? hit[1] : code;
 }
+
+// Same colour? Compares by name, so 'SL' (MacBook code) and 'Silver' (iMac) match
+export function sameColour(a, b) {
+  return String(colourName(a) || '').toLowerCase() === String(colourName(b) || '').toLowerCase();
+}
+
+export const isIMac = (info) => !!info && info.platform === 'mac' && /imac/i.test(info.machineName || info.model || '');
+const isAppleSilicon = (info) => /\bm[1-9]\b|apple/i.test(String(info.cpu || ''));
 
 export function shortCpu(name) {
   const m = String(name || '').match(CPU_RE);
@@ -109,7 +124,9 @@ function macName(info) {
     if (m) { name = name || m[1]; id = id || m[2]; }
   }
   const num = String(id || '').replace(/^[A-Za-z]+/, '');
-  return [name || 'Mac', num].filter(Boolean).join(' ');
+  // CeX lists older iMacs (2011 and before) as "Apple iMac 12,1"
+  const prefix = /imac/i.test(name || '') && parseInt(num, 10) <= 12 ? 'Apple ' : '';
+  return prefix + [name || 'Mac', num].filter(Boolean).join(' ');
 }
 
 // Apple sells 256GB / 512GB / 1TB..., but the drive reports 251GB / 500GB / 1000GB
@@ -172,16 +189,36 @@ export function screenSize(inches) {
 export function cexTitle(info, deviceType, opts = {}) {
   if (!info) return '';
   // Mac:  MacBook Pro 17,2/M5 (10-CPU 10-GPU)/16GB Ram/512GB SSD/14"/SB
+  // iMac: iMac 21,1/M1 (8-CPU 8-GPU)/8GB Ram/256GB SSD/24" 4.5K/Silver
+  //       iMac 16,2/i5-5575R/8GB Ram/1TB HDD/21"
+  //       Apple iMac 12,1/i5-2400S/8GB Ram/500GB HDD/DVD-RW/6750M/21"
   if (info.platform === 'mac') {
     const d = mainDisk(info);
-    const cores = info.cpuCores && info.gpuCores ? ` (${info.cpuCores}-CPU ${info.gpuCores}-GPU)` : '';
+    const silicon = isAppleSilicon(info);
+    const cores = silicon && info.cpuCores && info.gpuCores ? ` (${info.cpuCores}-CPU ${info.gpuCores}-GPU)` : '';
+    const hdd = d && /hdd/i.test(d.type || '');
+    const imac = isIMac(info);
+    let screen = null;
+    if (info.screenInches) {
+      // iMacs round down (21.5" -> 21") and add 4K / 4.5K / 5K for Retina screens
+      const inches = imac ? Math.floor(info.screenInches) : screenSize(info.screenInches);
+      const width = parseInt(String(info.screenPx || '').split('x')[0], 10) || 0;
+      const res = !imac ? '' : width >= 5000 ? ' 5K' : width >= 4400 ? ' 4.5K' : width >= 4000 ? ' 4K' : '';
+      screen = `${inches}"${res}`;
+    }
+    // Older Intel iMacs show a separate graphics card: "AMD Radeon HD 6750M" -> "6750M"
+    const card = !silicon && imac ? (info.gpus || []).find((g) => /radeon|geforce|nvidia|quadro/i.test(g.name || '')) : null;
+    const cardLabel = card ? card.name.replace(/\b(amd|ati|nvidia|geforce|radeon hd|radeon)\b/gi, '').replace(/\s+/g, ' ').trim() : null;
     return [
       macName(info),
       shortCpu(info.cpu) + cores,
       info.ramGB ? info.ramGB + 'GB Ram' : null,
-      d ? macStorage(d.sizeGB) + ' SSD' : null,
-      info.screenInches ? `${screenSize(info.screenInches)}"` : null,
-      opts.colour || null
+      d ? (hdd ? `${storageLabel(d.sizeGB)} HDD` : `${macStorage(d.sizeGB)} SSD`) : null,
+      info.optical ? 'DVD-RW' : null,
+      cardLabel,
+      screen,
+      // Colour: MacBooks use the code (SB), Apple-silicon iMacs the name (Silver), older iMacs none
+      imac ? (silicon ? colourName(opts.colour) || null : null) : opts.colour || null
     ].filter(Boolean).join('/');
   }
   const d = mainDisk(info);

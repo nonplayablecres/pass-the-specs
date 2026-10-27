@@ -3,7 +3,7 @@
 //   near  - same model and CPU, but RAM / storage / graphics differ
 //   none  - nothing on CeX -> price request
 import { bridge } from './bridge.js';
-import { colourName, gpuLabel, machineName, mainDisk, parseListing, shortCpu, storageLabel } from './autoChecks.js';
+import { colourName, gpuLabel, sameColour, machineName, mainDisk, parseListing, shortCpu, storageLabel } from './autoChecks.js';
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -39,7 +39,7 @@ export async function findListing(info, deviceType, opts = {}) {
     const gpuOk = target.gpu ? !!p.gpu && norm(target.gpu).includes(norm(p.gpu)) : !p.gpu;
     if (!gpuOk) diffs.push(p.gpu || 'no graphics card');
     // Colour (Macs): only the colour picked on the start screen is an exact match
-    if (opts.colour && p.colour && p.colour !== opts.colour) diffs.push(colourName(p.colour));
+    if (opts.colour && p.colour && !sameColour(p.colour, opts.colour)) diffs.push(colourName(p.colour));
 
     const item = { ...hit, grade: p.grade || '?', colour: p.colour || null, diffs };
     if (diffs.length) near.push(item); else exact.push(item);

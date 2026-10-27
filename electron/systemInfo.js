@@ -48,7 +48,9 @@ async function getPorts(checksDir) {
 // Built-in Mac screens, by resolution -> size in inches
 const MAC_SCREENS = {
   '2304x1440': 12, '2560x1600': 13.3, '2560x1664': 13.6, '2880x1864': 15.3, '2880x1800': 15.4,
-  '3024x1964': 14.2, '3456x2234': 16.2, '3072x1920': 16
+  '3024x1964': 14.2, '3456x2234': 16.2, '3072x1920': 16,
+  // iMacs
+  '4480x2520': 24, '5120x2880': 27, '4096x2304': 21.5, '2560x1440': 27, '1920x1080': 21.5, '1680x1050': 20, '1920x1200': 24
 };
 
 function flatten(items, out = []) {
@@ -65,7 +67,7 @@ async function macProfile(types) {
 }
 
 async function macInfo() {
-  const sp = await macProfile(['SPHardwareDataType', 'SPPowerDataType', 'SPStorageDataType', 'SPBluetoothDataType', 'SPAirPortDataType', 'SPCameraDataType', 'SPDisplaysDataType', 'SPCardReaderDataType']);
+  const sp = await macProfile(['SPHardwareDataType', 'SPPowerDataType', 'SPStorageDataType', 'SPBluetoothDataType', 'SPAirPortDataType', 'SPCameraDataType', 'SPDisplaysDataType', 'SPCardReaderDataType', 'SPDiscBurningDataType']);
   const hw = (sp.SPHardwareDataType || [])[0] || {};
   const power = sp.SPPowerDataType || [];
   const batt = power.find((p) => p.sppower_battery_health_info) || null;
@@ -96,9 +98,19 @@ async function macInfo() {
 
   // Built-in screen size
   const displays = flatten(sp.SPDisplaysDataType).filter((d) => d._spdisplays_pixels || d.spdisplays_pixelresolution);
-  const internal = displays.find((d) => /internal|built-?in/i.test(`${d.spdisplays_connection_type || ''} ${d.spdisplays_display_type || ''}`)) || null;
+  const isIMac = /imac/i.test(hw.machine_name || '');
+  const internal = displays.find((d) => /internal|built-?in/i.test(`${d.spdisplays_connection_type || ''} ${d.spdisplays_display_type || ''}`))
+    || (isIMac ? displays.find((d) => d.spdisplays_main === 'spdisplays_yes') || displays[0] : null) || null;
   const px = internal ? String(internal._spdisplays_pixels || internal.spdisplays_pixelresolution || '').replace(/[^0-9x]/gi, '').toLowerCase() : '';
   const screenInches = MAC_SCREENS[px] || null;
+
+  // Intel Macs: the exact chip (i5-5575R); graphics cards; DVD drive (older iMacs)
+  const brand = hw.chip_type ? '' : (await run('sysctl', ['-n', 'machdep.cpu.brand_string'])).trim();
+  const gpus = (sp.SPDisplaysDataType || []).map((d) => ({
+    name: d.sppci_model || d._name || '',
+    vramGB: parseInt(String(d.spdisplays_vram || d.spdisplays_vram_shared || '').replace(/[^0-9]/g, ''), 10) / (/MB/i.test(d.spdisplays_vram || '') ? 1024 : 1) || null
+  })).filter((g) => g.name);
+  const optical = (sp.SPDiscBurningDataType || []).length > 0;
 
   // WiFi: connected if the WiFi interface has an IP address
   const airport = (sp.SPAirPortDataType || [])[0] || {};
@@ -118,10 +130,12 @@ async function macInfo() {
     identifier: hw.machine_model || '',
     model: [hw.machine_name, hw.machine_model].filter(Boolean).join(' '),
     chassis: laptop ? 'laptop' : 'desktop',
-    gpus: [],
+    gpus,
+    optical,
+    screenPx: px || null,
     serial: hw.serial_number || null,
     os: { name: 'macOS ' + ver.trim(), version: ver.trim() },
-    cpu: hw.chip_type || hw.cpu_type || null,
+    cpu: hw.chip_type || brand || hw.cpu_type || null,
     cpuCores,
     gpuCores,
     ramGB,
@@ -140,7 +154,6 @@ async function macInfo() {
     cameras: (sp.SPCameraDataType || []).length,
     touch: false,
     fingerprint: laptop, // every Apple-silicon MacBook has Touch ID
-    optical: false,
     cardReader: (sp.SPCardReaderDataType || []).length > 0,
     profiles: users
   };
